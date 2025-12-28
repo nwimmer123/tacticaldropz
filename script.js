@@ -426,18 +426,24 @@
           ctx.arc(drawing.end.x, drawing.end.y, 6, 0, Math.PI * 2);
           ctx.fill();
         } else if (drawing.type === 'sight') {
-          // ctx.fillStyle = '#0066cc';
-          // ctx.strokeStyle = '#fff';
-          // ctx.lineWidth = 2;
-          // ctx.beginPath();
-          // ctx.arc(drawing.x, drawing.y, 18, 0, Math.PI * 2);
-          // ctx.fill();
-          // ctx.stroke();
-          // ctx.fillStyle = '#fff';
-          // ctx.font = 'bold 20px sans-serif';
-          // ctx.textAlign = 'center';
-          // ctx.textBaseline = 'middle';
-          // ctx.fillText('👁', drawing.x, drawing.y);
+          ctx.strokeStyle = '#0066cc';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(drawing.start.x, drawing.start.y);
+          ctx.lineTo(drawing.end.x, drawing.end.y);
+          ctx.stroke();
+
+          const dx = drawing.end.x - drawing.start.x;
+          const dy = drawing.end.y - drawing.start.y;
+          const midX = (drawing.start.x + drawing.end.x) / 2;
+          const midY = (drawing.start.y + drawing.end.y) / 2;
+          ctx.fillStyle = '#0066cc';
+          ctx.beginPath();
+          ctx.arc(drawing.start.x, drawing.start.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(drawing.end.x, drawing.end.y, 6, 0, Math.PI * 2);
+          ctx.fill();
         } else if (drawing.type === 'label') {
           ctx.fillStyle = 'rgba(0,0,0,0.8)';
           const textWidth = ctx.measureText(drawing.text).width;
@@ -500,11 +506,17 @@
         });
         drawScene();
       } else if (currentTool === 'sight') {
-        drawings.push({
-          type: 'sight',
-          x, y
-        });
-        drawScene();
+        if (measurePoints.length === 0) {
+          measurePoints.push({x, y});
+        } else {
+          drawings.push({
+            type: 'sight',
+            start: measurePoints[0],
+            end: {x, y}
+          });
+          measurePoints = [];
+          drawScene();
+        }
       } else if (currentTool === 'label') {
         const text = prompt('Enter label text:');
         if (text) {
@@ -525,6 +537,16 @@
       if (measurePoints.length === 1 && currentTool === 'measure') {
         drawScene();
         ctx.strokeStyle = 'rgba(255,136,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }else if (measurePoints.length === 1 && currentTool === 'sight'){
+        drawScene();
+        ctx.strokeStyle = '#0066cc';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
