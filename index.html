@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>40K Deployment Planner</title>
+  <link rel="stylesheet" href="styles.css"> 
+</head>
+<body>
+ <div class="banner">
+    <div class="banner-text">⚠️ Demo site, under development. Please give me feedback so I can improve the site! ⚠️</div>
+  </div>
+
+  <div class="container">
+    <!-- <div class="top-nav" id="topNav"></div> -->
+    <div class="top-nav" id="topNav">
+      <a href="about.html" class="tab">About</a>
+    </div>
+    
+    <div class="main-content">
+      <div class="left-sidebar" id="leftSidebar"></div>
+      
+      <div class="canvas-area">
+        <div class="toolbar">
+          <div class="toolbar-section">
+            <button class="tool-btn active" data-tool="draw">
+              ✏️ Draw Unit
+            </button>
+            <button class="tool-btn" data-tool="measure">📏 Measure</button>
+            <button class="tool-btn" data-tool="label">🏷️ Label</button>
+            <button class="tool-btn" data-tool="sight">👁️ Line of Sight</button>
+          </div>
+          
+          <div class="toolbar-section">
+            <span class="toolbar-label">Color:</span>
+            <div class="color-picker">
+              <div class="color-swatch active" style="background: #00ff00" data-color="#00ff00"></div>
+              <div class="color-swatch" style="background: #ff0000" data-color="#ff0000"></div>
+              <div class="color-swatch" style="background: #0080ff" data-color="#0080ff"></div>
+              <div class="color-swatch" style="background: #ffff00" data-color="#ffff00"></div>
+              <div class="color-swatch" style="background: #ff00ff" data-color="#ff00ff"></div>
+            </div>
+          </div>
+
+          <div class="toolbar-section">
+            <input type="text" id="unitName" placeholder="Unit name..." style="width: 150px;">
+          </div>
+          
+          <div class="toolbar-section">
+            <button class="tool-btn" onclick="clearCanvas()">🗑️ Clear</button>
+            <button class="tool-btn" onclick="savePlan()">💾 Save</button>
+            <button class="tool-btn" onclick="loadPlan()">📂 Load</button>
+          </div>
+
+          <div class="toolbar-section">
+            <span class="mode-label" id="modeLabel">Incursion</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="modeToggle" onchange="toggleMode()">
+              <span class="slider"></span>
+            </label>
+            <span class="mode-label">Strike Force</span>
+          </div>
+
+          <div class="toolbar-section">
+            <a href="mailto:nwimmer123@yahoo.com?subject=40K Deployment Planner Feedback" class="feedback-link">📧 Feedback</a>
+          </div>
+        </div>
+        
+        <div class="canvas-wrapper" id="canvasWrapper">
+          <canvas id="battlefield" width="900" height="720"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
