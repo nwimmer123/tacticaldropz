@@ -572,61 +572,6 @@
       }
     }
 
-    // function handleMouseDown(e) {
-    //   const rect = canvas.getBoundingClientRect();
-    //   const scaleX = canvas.width / rect.width;
-    //   const scaleY = canvas.height / rect.height;
-    //   const x = (e.clientX - rect.left) * scaleX;
-    //   const y = (e.clientY - rect.top) * scaleY;
-
-    //   if (currentTool === 'draw') {
-    //     if (currentPoints.length === 0 && !drawingHintShown) {
-    //       showDrawingHint();
-    //     }
-    //     currentPoints.push({x, y});
-    //     drawScene();
-    //   } else if (currentTool === 'measure') {
-    //     if (measurePoints.length === 0) {
-    //       measurePoints.push({x, y});
-    //     } else {
-    //       drawings.push({
-    //         type: 'measure',
-    //         start: measurePoints[0],
-    //         end: {x, y}
-    //       });
-    //       measurePoints = [];
-    //       drawScene();
-    //     }
-    //   } else if (currentTool === 'objective') {
-    //     drawings.push({
-    //       type: 'objective',
-    //       x, y, r: 45
-    //     });
-    //     drawScene();
-    //   } else if (currentTool === 'sight') {
-    //     if (measurePoints.length === 0) {
-    //       measurePoints.push({x, y});
-    //     } else {
-    //       drawings.push({
-    //         type: 'sight',
-    //         start: measurePoints[0],
-    //         end: {x, y}
-    //       });
-    //       measurePoints = [];
-    //       drawScene();
-    //     }
-    //   } else if (currentTool === 'label') {
-    //     const text = prompt('Enter label text:');
-    //     if (text) {
-    //       drawings.push({
-    //         type: 'label',
-    //         x, y, text
-    //       });
-    //       drawScene();
-    //     }
-    //   }
-    // }
-
     function handleMouseDown(e) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -698,36 +643,6 @@
         }
       }
     }
-
-    // function handleMouseMove(e) {
-    //   const rect = canvas.getBoundingClientRect();
-    //   const scaleX = canvas.width / rect.width;
-    //   const scaleY = canvas.height / rect.height;
-    //   const x = (e.clientX - rect.left) * scaleX;
-    //   const y = (e.clientY - rect.top) * scaleY;
-
-    //   if (measurePoints.length === 1 && currentTool === 'measure') {
-    //     drawScene();
-    //     ctx.strokeStyle = 'rgba(255,136,0,0.5)';
-    //     ctx.lineWidth = 2;
-    //     ctx.setLineDash([5, 5]);
-    //     ctx.beginPath();
-    //     ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
-    //     ctx.lineTo(x, y);
-    //     ctx.stroke();
-    //     ctx.setLineDash([]);
-    //   }else if (measurePoints.length === 1 && currentTool === 'sight'){
-    //     drawScene();
-    //     ctx.strokeStyle = '#0066cc';
-    //     ctx.lineWidth = 2;
-    //     ctx.setLineDash([5, 5]);
-    //     ctx.beginPath();
-    //     ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
-    //     ctx.lineTo(x, y);
-    //     ctx.stroke();
-    //     ctx.setLineDash([]);
-    //   }
-    // }
 
     function handleMouseMove(e) {
       const rect = canvas.getBoundingClientRect();
