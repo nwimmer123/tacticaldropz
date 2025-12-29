@@ -14,6 +14,10 @@
     let isDrawing = false;
     let drawingHintShown = false;
     let hintElement = null;
+
+    let selectedUnit = null;
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
     
     const terrainImages = [];
     let imagesLoaded = 0;
@@ -46,6 +50,23 @@
       };
       img.src = path;
     });
+
+    function isPointInUnit(x, y, unit) {
+      // Point-in-polygon algorithm
+      let inside = false;
+      const points = unit.points;
+      
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x, yi = points[i].y;
+        const xj = points[j].x, yj = points[j].y;
+        
+        const intersect = ((yi > y) !== (yj > y))
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      
+      return inside;
+    }
 
     function updateUnitsList() {
       const unitsList = document.getElementById('unitsList');
@@ -355,6 +376,8 @@
       canvas.addEventListener('mousedown', handleMouseDown);
       canvas.addEventListener('mousemove', handleMouseMove);
       canvas.addEventListener('dblclick', handleDoubleClick);
+      canvas.addEventListener('mouseup', handleMouseUp);        // Add these two
+      canvas.addEventListener('mouseleave', handleMouseUp);      
 
       drawScene();
       resizeCanvas();
@@ -549,6 +572,61 @@
       }
     }
 
+    // function handleMouseDown(e) {
+    //   const rect = canvas.getBoundingClientRect();
+    //   const scaleX = canvas.width / rect.width;
+    //   const scaleY = canvas.height / rect.height;
+    //   const x = (e.clientX - rect.left) * scaleX;
+    //   const y = (e.clientY - rect.top) * scaleY;
+
+    //   if (currentTool === 'draw') {
+    //     if (currentPoints.length === 0 && !drawingHintShown) {
+    //       showDrawingHint();
+    //     }
+    //     currentPoints.push({x, y});
+    //     drawScene();
+    //   } else if (currentTool === 'measure') {
+    //     if (measurePoints.length === 0) {
+    //       measurePoints.push({x, y});
+    //     } else {
+    //       drawings.push({
+    //         type: 'measure',
+    //         start: measurePoints[0],
+    //         end: {x, y}
+    //       });
+    //       measurePoints = [];
+    //       drawScene();
+    //     }
+    //   } else if (currentTool === 'objective') {
+    //     drawings.push({
+    //       type: 'objective',
+    //       x, y, r: 45
+    //     });
+    //     drawScene();
+    //   } else if (currentTool === 'sight') {
+    //     if (measurePoints.length === 0) {
+    //       measurePoints.push({x, y});
+    //     } else {
+    //       drawings.push({
+    //         type: 'sight',
+    //         start: measurePoints[0],
+    //         end: {x, y}
+    //       });
+    //       measurePoints = [];
+    //       drawScene();
+    //     }
+    //   } else if (currentTool === 'label') {
+    //     const text = prompt('Enter label text:');
+    //     if (text) {
+    //       drawings.push({
+    //         type: 'label',
+    //         x, y, text
+    //       });
+    //       drawScene();
+    //     }
+    //   }
+    // }
+
     function handleMouseDown(e) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -556,7 +634,24 @@
       const x = (e.clientX - rect.left) * scaleX;
       const y = (e.clientY - rect.top) * scaleY;
 
+      // Check if clicking on a unit (in reverse order to get topmost unit)
       if (currentTool === 'draw') {
+        for (let i = drawings.length - 1; i >= 0; i--) {
+          if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
+            selectedUnit = i;
+            isDragging = true;
+            
+            // Calculate center of unit
+            const centerX = drawings[i].points.reduce((sum, pt) => sum + pt.x, 0) / drawings[i].points.length;
+            const centerY = drawings[i].points.reduce((sum, pt) => sum + pt.y, 0) / drawings[i].points.length;
+            
+            dragOffset = { x: x - centerX, y: y - centerY };
+            canvas.style.cursor = 'grabbing';
+            return; // Don't start drawing a new unit
+          }
+        }
+        
+        // If not clicking on a unit, start drawing
         if (currentPoints.length === 0 && !drawingHintShown) {
           showDrawingHint();
         }
@@ -604,6 +699,36 @@
       }
     }
 
+    // function handleMouseMove(e) {
+    //   const rect = canvas.getBoundingClientRect();
+    //   const scaleX = canvas.width / rect.width;
+    //   const scaleY = canvas.height / rect.height;
+    //   const x = (e.clientX - rect.left) * scaleX;
+    //   const y = (e.clientY - rect.top) * scaleY;
+
+    //   if (measurePoints.length === 1 && currentTool === 'measure') {
+    //     drawScene();
+    //     ctx.strokeStyle = 'rgba(255,136,0,0.5)';
+    //     ctx.lineWidth = 2;
+    //     ctx.setLineDash([5, 5]);
+    //     ctx.beginPath();
+    //     ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
+    //     ctx.lineTo(x, y);
+    //     ctx.stroke();
+    //     ctx.setLineDash([]);
+    //   }else if (measurePoints.length === 1 && currentTool === 'sight'){
+    //     drawScene();
+    //     ctx.strokeStyle = '#0066cc';
+    //     ctx.lineWidth = 2;
+    //     ctx.setLineDash([5, 5]);
+    //     ctx.beginPath();
+    //     ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
+    //     ctx.lineTo(x, y);
+    //     ctx.stroke();
+    //     ctx.setLineDash([]);
+    //   }
+    // }
+
     function handleMouseMove(e) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -611,6 +736,45 @@
       const x = (e.clientX - rect.left) * scaleX;
       const y = (e.clientY - rect.top) * scaleY;
 
+      // Handle unit dragging
+      if (isDragging && selectedUnit !== null) {
+        const unit = drawings[selectedUnit];
+        
+        // Calculate current center
+        const oldCenterX = unit.points.reduce((sum, pt) => sum + pt.x, 0) / unit.points.length;
+        const oldCenterY = unit.points.reduce((sum, pt) => sum + pt.y, 0) / unit.points.length;
+        
+        // Calculate new center
+        const newCenterX = x - dragOffset.x;
+        const newCenterY = y - dragOffset.y;
+        
+        // Calculate offset
+        const dx = newCenterX - oldCenterX;
+        const dy = newCenterY - oldCenterY;
+        
+        // Move all points
+        unit.points.forEach(pt => {
+          pt.x += dx;
+          pt.y += dy;
+        });
+        
+        drawScene();
+        return;
+      }
+
+      // Handle cursor change when hovering over units in draw mode
+      if (currentTool === 'draw' && !isDragging && currentPoints.length === 0) {
+        let overUnit = false;
+        for (let i = drawings.length - 1; i >= 0; i--) {
+          if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
+            overUnit = true;
+            break;
+          }
+        }
+        canvas.style.cursor = overUnit ? 'grab' : 'crosshair';
+      }
+
+      // Handle measure tool preview
       if (measurePoints.length === 1 && currentTool === 'measure') {
         drawScene();
         ctx.strokeStyle = 'rgba(255,136,0,0.5)';
@@ -621,7 +785,7 @@
         ctx.lineTo(x, y);
         ctx.stroke();
         ctx.setLineDash([]);
-      }else if (measurePoints.length === 1 && currentTool === 'sight'){
+      } else if (measurePoints.length === 1 && currentTool === 'sight'){
         drawScene();
         ctx.strokeStyle = '#0066cc';
         ctx.lineWidth = 2;
@@ -649,6 +813,15 @@
         hideDrawingHint();
         drawScene();
         updateUnitsList(); // Add this line
+      }
+    }
+
+    function handleMouseUp(e) {
+      if (isDragging && selectedUnit !== null) {
+        isDragging = false;
+        selectedUnit = null;
+        canvas.style.cursor = 'crosshair';
+        drawScene();
       }
     }
 
