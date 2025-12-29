@@ -161,21 +161,16 @@
       box-shadow: 0 0 0 2px #e94560;
     }
 
-    .canvas-wrapper {
-      flex: 1;
-      position: relative;
-      overflow: auto;
-      background: #0a0e1a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
     #battlefield {
       display: block;
       background: #1a1a2e;
       cursor: crosshair;
       image-rendering: crisp-edges;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain; /* Maintains aspect ratio */
     }
 
     .drawing-hint {
@@ -304,4 +299,91 @@
     .feedback-link:hover {
       background: #1a508b;
       color: #fff;
+    }
+
+    .canvas-with-sidebar {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .canvas-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #0a0e1a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px; /* Optional: adds some breathing room */
+    }
+
+    .right-sidebar {
+      width: 200px;
+      background: #16213e;
+      border-left: 2px solid #0f3460;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 15px 20px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      border-bottom: 1px solid #0f3460;
+      background: rgba(233,69,96,0.1);
+    }
+
+    .unit-item {
+      padding: 12px 20px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .unit-item:hover {
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+    }
+
+    .unit-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .unit-item {
+      padding: 12px 20px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .unit-action-btn {
+      opacity: 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      font-size: 14px;
+    }
+
+    .unit-item:hover .unit-action-btn {
+      opacity: 1;
+    }
+
+    .unit-action-btn:hover {
+      transform: scale(1.2);
     }

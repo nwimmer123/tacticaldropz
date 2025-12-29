@@ -47,6 +47,78 @@
       img.src = path;
     });
 
+    function updateUnitsList() {
+      const unitsList = document.getElementById('unitsList');
+      unitsList.innerHTML = '';
+      
+      drawings.forEach((drawing, index) => {
+        if (drawing.type === 'unit') {
+          const unitItem = document.createElement('div');
+          unitItem.className = 'unit-item';
+          
+          const colorDot = document.createElement('div');
+          colorDot.className = 'unit-color-dot';
+          colorDot.style.backgroundColor = drawing.color;
+          
+          const label = document.createElement('span');
+          label.textContent = drawing.label || 'Unit';
+          label.style.flex = '1';
+          
+          // Delete button
+          const deleteBtn = document.createElement('span');
+          deleteBtn.textContent = '🗑️';
+          deleteBtn.className = 'unit-action-btn';
+          deleteBtn.title = 'Delete unit';
+          deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`Delete "${drawing.label || 'Unit'}"?`)) {
+              drawings.splice(index, 1);
+              drawScene();
+              updateUnitsList();
+            }
+          };
+          
+          unitItem.appendChild(colorDot);
+          unitItem.appendChild(label);
+          unitItem.appendChild(deleteBtn);
+          
+          // Click anywhere else to edit
+          unitItem.addEventListener('click', (e) => {
+            if (e.target === deleteBtn) return;
+            const newLabel = prompt('Edit unit name:', drawing.label || 'Unit');
+            if (newLabel !== null && newLabel.trim() !== '') {
+              drawings[index].label = newLabel.trim();
+              drawScene();
+              updateUnitsList();
+            }
+          });
+          
+          unitsList.appendChild(unitItem);
+        }
+      });
+    }
+
+    function resizeCanvas() {
+      const wrapper = document.getElementById('canvasWrapper');
+      const canvas = document.getElementById('battlefield');
+      
+      const wrapperWidth = wrapper.clientWidth - 40; // Subtract padding
+      const wrapperHeight = wrapper.clientHeight - 40;
+      
+      const canvasRatio = 900 / 720; // 1.25
+      const wrapperRatio = wrapperWidth / wrapperHeight;
+      
+      if (wrapperRatio > canvasRatio) {
+        // Wrapper is wider, fit to height
+        canvas.style.height = wrapperHeight + 'px';
+        canvas.style.width = (wrapperHeight * canvasRatio) + 'px';
+      } else {
+        // Wrapper is taller, fit to width
+        canvas.style.width = wrapperWidth + 'px';
+        canvas.style.height = (wrapperWidth / canvasRatio) + 'px';
+      }
+    }
+
     function inchesToPixels(inches, rate){
       return (inches * rate);
     }
@@ -285,6 +357,7 @@
       canvas.addEventListener('dblclick', handleDoubleClick);
 
       drawScene();
+      resizeCanvas();
     }
 
     function selectLayout(index) {
@@ -478,8 +551,10 @@
 
     function handleMouseDown(e) {
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
 
       if (currentTool === 'draw') {
         if (currentPoints.length === 0 && !drawingHintShown) {
@@ -531,8 +606,10 @@
 
     function handleMouseMove(e) {
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
 
       if (measurePoints.length === 1 && currentTool === 'measure') {
         drawScene();
@@ -571,6 +648,7 @@
         drawingHintShown = true;
         hideDrawingHint();
         drawScene();
+        updateUnitsList(); // Add this line
       }
     }
 
@@ -582,6 +660,7 @@
         drawingHintShown = false;
         hideDrawingHint();
         drawScene();
+        updateUnitsList(); // Add this line
       }
     }
 
@@ -621,6 +700,7 @@
             selectDeployment(currentDeployment);
             selectLayout(currentLayout);
             drawScene();
+            updateUnitsList(); // Add this line
           } catch (err) {
             alert('Error loading plan: ' + err.message);
           }
@@ -631,3 +711,6 @@
     }
 
     init();
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', resizeCanvas);
