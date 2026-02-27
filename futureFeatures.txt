@@ -1,0 +1,18 @@
+Future Features:
+
+soon
+
+- line of sight lines
+- add WTC format 
+- add UKTC format 
+
+bases mode vs draw mode
+- base sized markers to drag onto the map
+- unit grouping
+- yeah you could have a "create unit" button. Once you click it, you could select all the bases in that group, click the "save unit" button, which saves the grouping, and then you can move it as a group. And, it could populate a list in a side panel of your existing units. So you could click on them (the names in the list) as well, to highlite the unit on the board and allow you to edit the locations of individual models.
+
+later
+
+- support other games
+- user log in, so you can save your layouts on the cloud and see them again when you open on another device
+- mobile phone view mode
