@@ -86,29 +86,107 @@ async function init() {
 async function loadDeployments() {
   try {
     const res = await fetch('data/deployments.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     deployments = await res.json();
-    currentMission = deployments[0];
+    console.log(`Loaded ${deployments.length} deployments from JSON`);
   } catch (e) {
-    console.warn('Could not load deployments.json, using empty set.', e);
-    deployments = [];
+    console.warn('Could not load deployments.json, using built-in data.', e);
+    deployments = FALLBACK_DEPLOYMENTS;
   }
+  currentMission = deployments[0] || null;
 }
+
+// ─── Fallback Deployment Data (used if fetch fails) ───────────────────────────
+const FALLBACK_DEPLOYMENTS = [
+  {
+    id: 'tippingPoint', name: 'Tipping Point',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[0,0],[12,0],[12,24],[20,24],[20,48],[0,48]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[40,0],[60,0],[60,48],[48,48],[48,24],[40,24]] }
+    ],
+    objectives: [{x:22,y:10},{x:30,y:24},{x:38,y:38},{x:14,y:34},{x:46,y:14}]
+  },
+  {
+    id: 'hammerAnvil', name: 'Hammer and Anvil',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[0,0],[18,0],[18,48],[0,48]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[42,0],[60,0],[60,48],[42,48]] }
+    ],
+    objectives: [{x:30,y:6},{x:30,y:24},{x:30,y:42},{x:10,y:24},{x:50,y:24}]
+  },
+  {
+    id: 'searchDestroy', name: 'Search and Destroy',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[30,0],[60,0],[60,24],[39,24],[30,15]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[0,24],[21,24],[30,33],[30,48],[0,48]] }
+    ],
+    objectives: [{x:14,y:10},{x:14,y:38},{x:30,y:24},{x:46,y:10},{x:46,y:38}]
+  },
+  {
+    id: 'crucibleBattle', name: 'Crucible of Battle',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[0,0],[30,48],[0,48]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[30,0],[60,0],[60,48]] }
+    ],
+    objectives: [{x:20,y:8},{x:30,y:24},{x:40,y:40},{x:14,y:38},{x:46,y:10}]
+  },
+  {
+    id: 'sweepingEngage', name: 'Sweeping Engagement',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[0,0],[60,0],[60,14],[30,14],[30,8],[0,8]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[0,34],[30,34],[30,40],[60,40],[60,48],[0,48]] }
+    ],
+    objectives: [{x:10,y:18},{x:30,y:24},{x:50,y:30},{x:42,y:6},{x:18,y:42}]
+  },
+  {
+    id: 'dawnWar', name: 'Dawn of War',
+    zones: [
+      { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
+        points: [[0,0],[60,0],[60,12],[0,12]] },
+      { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
+        points: [[0,36],[60,36],[60,48],[0,48]] }
+    ],
+    objectives: [{x:10,y:24},{x:30,y:24},{x:50,y:24},{x:30,y:6},{x:30,y:42}]
+  }
+];
 
 async function loadWtcTerrain() {
   try {
     const res = await fetch('data/terrain/wtc-terrain.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     wtcData = await res.json();
+    console.log(`Loaded WTC terrain: ${Object.keys(wtcData.missions || {}).length} missions`);
   } catch (e) {
     console.warn('Could not load wtc-terrain.json', e);
+    wtcData = { format: 'wtc', name: 'WTC', missions: {
+      hammerAnvil:   { name: 'Hammer and Anvil',    layouts: [{ id: 'ha_1', name: 'Layout 1', pieces: [] }] },
+      tippingPoint:  { name: 'Tipping Point',        layouts: [{ id: 'tp_1', name: 'Layout 1', pieces: [] }] },
+      searchDestroy: { name: 'Search and Destroy',   layouts: [{ id: 'sd_1', name: 'Layout 1', pieces: [] }] },
+      crucibleBattle:{ name: 'Crucible of Battle',   layouts: [{ id: 'cb_1', name: 'Layout 1', pieces: [] }] },
+      sweepingEngage:{ name: 'Sweeping Engagement',  layouts: [{ id: 'se_1', name: 'Layout 1', pieces: [] }] },
+      dawnWar:       { name: 'Dawn of War',          layouts: [{ id: 'dw_1', name: 'Layout 1', pieces: [] }] }
+    }};
   }
 }
 
 async function loadUktcTerrain() {
   try {
     const res = await fetch('data/terrain/uktc-terrain.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     uktcData = await res.json();
   } catch (e) {
     console.warn('Could not load uktc-terrain.json', e);
+    uktcData = { format: 'uktc', name: 'UKTC', layouts: [{ id: 'placeholder', name: 'No layouts loaded', pieces: [] }] };
   }
 }
 
@@ -190,6 +268,23 @@ function buildNav() {
   nav.appendChild(feedback);
 }
 
+function getWtcMissionLayouts() {
+  if (!wtcData || !wtcData.missions) {
+    console.warn('getWtcMissionLayouts: wtcData or wtcData.missions missing', wtcData);
+    return null;
+  }
+  const missionId = currentMission ? currentMission.id : null;
+  if (!missionId) {
+    console.warn('getWtcMissionLayouts: currentMission is null');
+    return null;
+  }
+  const missionData = wtcData.missions[missionId];
+  if (!missionData) {
+    console.warn(`getWtcMissionLayouts: no mission data for id "${missionId}". Available keys:`, Object.keys(wtcData.missions));
+  }
+  return missionData ? missionData.layouts : null;
+}
+
 function populateLayoutDropdown() {
   const sel = document.getElementById('layoutSelect');
   sel.innerHTML = '';
@@ -202,12 +297,20 @@ function populateLayoutDropdown() {
       sel.appendChild(o);
     }
   } else if (currentTerrainFormat === 'wtc' && wtcData) {
-    wtcData.layouts.forEach((layout, i) => {
+    const layouts = getWtcMissionLayouts();
+    if (layouts && layouts.length) {
+      layouts.forEach((layout, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        o.textContent = layout.name;
+        sel.appendChild(o);
+      });
+    } else {
       const o = document.createElement('option');
-      o.value = i;
-      o.textContent = layout.name;
+      o.value = 0;
+      o.textContent = 'No WTC layouts for this mission';
       sel.appendChild(o);
-    });
+    }
   } else if (currentTerrainFormat === 'uktc' && uktcData) {
     uktcData.layouts.forEach((layout, i) => {
       const o = document.createElement('option');
@@ -269,6 +372,8 @@ function selectMission(id) {
   document.querySelectorAll('.deploy-option').forEach(o => {
     o.classList.toggle('active', o.dataset.id === id);
   });
+  // WTC terrain is mission-specific — repopulate layout dropdown
+  if (currentTerrainFormat === 'wtc') populateLayoutDropdown();
   drawScene();
 }
 
@@ -504,7 +609,9 @@ function clipLosToTerrain(start, end) {
 
 function getWtcLayoutData() {
   if (!wtcData) return null;
-  return wtcData.layouts[currentLayoutIndex] || null;
+  const layouts = getWtcMissionLayouts();
+  if (!layouts) return null;
+  return layouts[currentLayoutIndex] || null;
 }
 
 // ─── Draw Scene ───────────────────────────────────────────────────────────────

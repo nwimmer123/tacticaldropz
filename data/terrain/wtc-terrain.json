@@ -1,34 +1,349 @@
 {
   "format": "wtc",
   "name": "WTC",
-  "layouts": [
-    {
-      "id": "wtc_hammer_anvil_1",
-      "name": "Hammer & Anvil 1",
-      "pieces": [
-        { "shape": "wtc_three_storey", "facing": "NW", "corners": [[1,1],[13,1],[13,7],[1,7]] },
-        { "shape": "wtc_three_storey", "facing": "SE", "corners": [[3,8],[15,8],[15,14],[3,14]] },
-        { "shape": "wtc_three_storey", "facing": "NW", "corners": [[18,17],[30,17],[30,23],[18,23]] },
-        { "shape": "wtc_three_storey", "facing": "SE", "corners": [[30,25],[42,25],[42,31],[30,31]] },
-        { "shape": "wtc_three_storey", "facing": "NE", "corners": [[47,1],[59,1],[59,7],[47,7]] },
-        { "shape": "wtc_three_storey", "facing": "SW", "corners": [[45,8],[57,8],[57,14],[45,14]] },
-        { "shape": "wtc_container",    "facing": null,  "corners": [[24,0],[29,0],[29,3],[24,3]] },
-        { "shape": "wtc_container",    "facing": null,  "corners": [[24,45],[29,45],[29,48],[24,48]] },
-        { "shape": "wtc_three_storey", "facing": "SW", "corners": [[3,34],[15,34],[15,40],[3,40]] },
-        { "shape": "wtc_three_storey", "facing": "NE", "corners": [[5,41],[17,41],[17,47],[5,47]] },
-        { "shape": "wtc_three_storey", "facing": "SE", "corners": [[45,34],[57,34],[57,40],[45,40]] },
-        { "shape": "wtc_three_storey", "facing": "NW", "corners": [[43,41],[55,41],[55,47],[43,47]] }
+  "missions": {
+    "hammerAnvil": {
+      "name": "Hammer and Anvil",
+      "layouts": [
+        {
+          "id": "ha_1",
+          "name": "Layout 1",
+          "pieces": [
+            {
+              "id": "1",
+              "shape": "wtc_three_storey",
+              "facing": "SW",
+              "corners": [[45,3],[57,3],[57,9],[45,9]]
+            },
+            {
+              "id": "1M",
+              "shape": "wtc_three_storey",
+              "facing": "NE",
+              "corners": [[3,3],[15,3],[15,9],[3,9]]
+            },
+            {
+              "id": "2",
+              "shape": "wtc_three_storey",
+              "facing": "SW",
+              "corners": [[36,18],[46,20],[45,26],[35,24]]
+            },
+            {
+              "id": "2M",
+              "shape": "wtc_three_storey",
+              "facing": "NE",
+              "corners": [[24,18],[14,20],[15,26],[25,24]]
+            },
+            {
+              "id": "3",
+              "shape": "wtc_three_storey",
+              "facing": "NW",
+              "corners": [[10,31],[22,31],[22,37],[10,37]]
+            },
+            {
+              "id": "3M",
+              "shape": "wtc_three_storey",
+              "facing": "SE",
+              "corners": [[38,31],[50,31],[50,37],[38,37]]
+            },
+            {
+              "id": "4",
+              "shape": "wtc_three_storey",
+              "facing": "NW",
+              "corners": [[45,21.5],[54,14],[58,19],[49,26.5]]
+            },
+            {
+              "id": "4M",
+              "shape": "wtc_three_storey",
+              "facing": "SE",
+              "corners": [[15,21.5],[6,14],[2,19],[11,26.5]]
+            },
+            {
+              "id": "5",
+              "shape": "wtc_three_storey",
+              "facing": "NW",
+              "corners": [[42,35],[52,29],[55,34],[45,40]]
+            },
+            {
+              "id": "5M",
+              "shape": "wtc_three_storey",
+              "facing": "SE",
+              "corners": [[18,35],[8,29],[5,34],[15,40]]
+            },
+            {
+              "id": "6",
+              "shape": "wtc_container",
+              "facing": null,
+              "corners": [[27,41.5],[32,41.5],[32,44],[27,44]]
+            },
+            {
+              "id": "6M",
+              "shape": "wtc_container",
+              "facing": null,
+              "corners": [[28,0],[33,0],[33,2.5],[28,2.5]]
+            }
+          ]
+        },
+        {
+          "id": "ha_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "ha_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "ha_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "ha_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "ha_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "ha_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "ha_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
       ]
     },
-    {
-      "id": "wtc_layout_placeholder_2",
-      "name": "Layout 2 (placeholder)",
-      "pieces": []
+    "tippingPoint": {
+      "name": "Tipping Point",
+      "layouts": [
+        {
+          "id": "tp_1",
+          "name": "Layout 1",
+          "pieces": []
+        },
+        {
+          "id": "tp_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "tp_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "tp_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "tp_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "tp_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "tp_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "tp_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
+      ]
     },
-    {
-      "id": "wtc_layout_placeholder_3",
-      "name": "Layout 3 (placeholder)",
-      "pieces": []
+    "searchDestroy": {
+      "name": "Search and Destroy",
+      "layouts": [
+        {
+          "id": "sd_1",
+          "name": "Layout 1",
+          "pieces": []
+        },
+        {
+          "id": "sd_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "sd_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "sd_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "sd_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "sd_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "sd_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "sd_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
+      ]
+    },
+    "crucibleBattle": {
+      "name": "Crucible of Battle",
+      "layouts": [
+        {
+          "id": "cb_1",
+          "name": "Layout 1",
+          "pieces": []
+        },
+        {
+          "id": "cb_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "cb_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "cb_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "cb_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "cb_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "cb_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "cb_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
+      ]
+    },
+    "sweepingEngage": {
+      "name": "Sweeping Engagement",
+      "layouts": [
+        {
+          "id": "se_1",
+          "name": "Layout 1",
+          "pieces": []
+        },
+        {
+          "id": "se_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "se_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "se_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "se_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "se_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "se_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "se_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
+      ]
+    },
+    "dawnWar": {
+      "name": "Dawn of War",
+      "layouts": [
+        {
+          "id": "dw_1",
+          "name": "Layout 1",
+          "pieces": []
+        },
+        {
+          "id": "dw_2",
+          "name": "Layout 2",
+          "pieces": []
+        },
+        {
+          "id": "dw_3",
+          "name": "Layout 3",
+          "pieces": []
+        },
+        {
+          "id": "dw_4",
+          "name": "Layout 4",
+          "pieces": []
+        },
+        {
+          "id": "dw_5",
+          "name": "Layout 5",
+          "pieces": []
+        },
+        {
+          "id": "dw_6",
+          "name": "Layout 6",
+          "pieces": []
+        },
+        {
+          "id": "dw_7",
+          "name": "Layout 7",
+          "pieces": []
+        },
+        {
+          "id": "dw_8",
+          "name": "Layout 8",
+          "pieces": []
+        }
+      ]
     }
-  ]
+  }
 }
