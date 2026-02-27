@@ -1,804 +1,1033 @@
-    const canvas = document.getElementById('battlefield');
-    const ctx = canvas.getContext('2d');
-    const inchToPixel = 15;
-    
-    let currentTool = 'draw';
-    let currentColor = '#00ff00';
-    let currentDeployment = 'tippingPoint';
-    let currentLayout = 0;
-    let gameMode = 'incursion';
-    
-    let drawings = [];
-    let currentPoints = [];
-    let measurePoints = [];
-    let isDrawing = false;
-    let drawingHintShown = false;
-    let hintElement = null;
+// ─── Constants ────────────────────────────────────────────────────────────────
+const IPX = 15; // inches to pixels: 1" = 15px
+// Board: 60" x 48" = 900px x 720px
 
-    let selectedUnit = null;
-    let isDragging = false;
-    let dragOffset = { x: 0, y: 0 };
-    
-    const terrainImages = [];
-    let imagesLoaded = 0;
+// ─── WTC Piece Library ────────────────────────────────────────────────────────
+// All dimensions in inches. Arm lengths derived from official 2025/2026 WTC pack.
+// Footprint: 12"x6". Internal ruin: 9"x5". Wall thickness: 1.3" (33mm lower floor).
+// VERIFY: armLong, armShort, wallThickness against physical pieces if rendering looks off.
+const WTC_PIECES = {
+  wtc_three_storey: {
+    label: '3-Storey Ruin',
+    armLong: 9,          // inches along long edge  — VERIFY
+    armShort: 5,         // inches along short edge — VERIFY
+    wallThickness: 1.3,  // inches (33mm)           — VERIFY
+    fillColor: 'rgba(60,80,100,0.75)',
+    strokeColor: 'rgba(120,160,200,0.9)',
+    wallColor: 'rgba(80,110,140,0.95)'
+  },
+  wtc_two_storey: {
+    label: '2-Storey Ruin',
+    armLong: 9,
+    armShort: 5,
+    wallThickness: 1.3,
+    fillColor: 'rgba(60,80,100,0.6)',
+    strokeColor: 'rgba(120,160,200,0.75)',
+    wallColor: 'rgba(80,110,140,0.85)'
+  },
+  wtc_container: {
+    label: 'Container',
+    fillColor: 'rgba(80,100,60,0.75)',
+    strokeColor: 'rgba(140,180,100,0.9)'
+  },
+  wtc_prototype: {
+    label: 'Prototype Ruin',
+    fillColor: 'rgba(100,80,60,0.6)',
+    strokeColor: 'rgba(180,140,100,0.75)'
+  }
+};
 
-    const terrainImageData = [
-      'layouts/l1.png',
-      'layouts/l2.png',
-      'layouts/l3.png',
-      'layouts/l4.png',
-      'layouts/l5.png',
-      'layouts/l6.png',
-      'layouts/l7.png',
-      'layouts/l8.png'
-    ];
-  
-    terrainImageData.forEach((path, index) => {
-      const img = new Image();
-      img.onload = () => {
-        terrainImages[index] = img;
-        imagesLoaded++;
-        if (imagesLoaded === terrainImageData.length) {
-          drawScene();
-        }
-      };
-      img.onerror = () => {
-        imagesLoaded++;
-        if (imagesLoaded === terrainImageData.length) {
-          drawScene();
-        }
-      };
-      img.src = path;
+// ─── State ────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('battlefield');
+const ctx = canvas.getContext('2d');
+
+let currentTool = 'draw';
+let currentColor = '#00ff00';
+let currentMission = null;
+let currentTerrainFormat = 'gw'; // 'gw' | 'wtc' | 'uktc'
+let currentLayoutIndex = 0;
+
+let deployments = [];
+let gwLayouts = 8; // GW uses image-based layouts l1-l8
+let wtcData = null;
+let uktcData = null;
+let currentWtcLayout = null;
+
+let drawings = [];
+let currentPoints = [];
+let measurePoints = [];
+let isDrawing = false;
+let drawingHintShown = false;
+let hintElement = null;
+
+let selectedUnit = null;
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
+
+// GW terrain images
+const terrainImages = [];
+let gwImagesLoaded = 0;
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadDeployments();
+  await loadWtcTerrain();
+  await loadUktcTerrain();
+  loadGwImages();
+  buildNav();
+  buildMissionSidebar();
+  bindToolbar();
+  bindCanvas();
+  resizeCanvas();
+  drawScene();
+}
+
+// ─── Data Loading ─────────────────────────────────────────────────────────────
+async function loadDeployments() {
+  try {
+    const res = await fetch('data/deployments.json');
+    deployments = await res.json();
+    currentMission = deployments[0];
+  } catch (e) {
+    console.warn('Could not load deployments.json, using empty set.', e);
+    deployments = [];
+  }
+}
+
+async function loadWtcTerrain() {
+  try {
+    const res = await fetch('data/terrain/wtc-terrain.json');
+    wtcData = await res.json();
+  } catch (e) {
+    console.warn('Could not load wtc-terrain.json', e);
+  }
+}
+
+async function loadUktcTerrain() {
+  try {
+    const res = await fetch('data/terrain/uktc-terrain.json');
+    uktcData = await res.json();
+  } catch (e) {
+    console.warn('Could not load uktc-terrain.json', e);
+  }
+}
+
+function loadGwImages() {
+  for (let i = 1; i <= 8; i++) {
+    const img = new Image();
+    img.onload = img.onerror = () => {
+      gwImagesLoaded++;
+      if (gwImagesLoaded === 8 && currentTerrainFormat === 'gw') drawScene();
+    };
+    img.src = `layouts/l${i}.png`;
+    terrainImages[i - 1] = img;
+  }
+}
+
+// ─── Nav / UI Build ───────────────────────────────────────────────────────────
+function buildNav() {
+  const nav = document.getElementById('topNav');
+  nav.innerHTML = '';
+
+  // App title
+  const title = document.createElement('span');
+  title.className = 'nav-title';
+  title.textContent = 'TacticalDropz';
+  nav.appendChild(title);
+
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+  nav.appendChild(spacer);
+
+  // Terrain Set dropdown
+  const terrainLabel = document.createElement('span');
+  terrainLabel.className = 'nav-label';
+  terrainLabel.textContent = 'Terrain:';
+  nav.appendChild(terrainLabel);
+
+  const terrainSelect = document.createElement('select');
+  terrainSelect.className = 'nav-select';
+  terrainSelect.id = 'terrainFormatSelect';
+  [
+    { value: 'gw', label: 'GW' },
+    { value: 'wtc', label: 'WTC' },
+    { value: 'uktc', label: 'UKTC (coming soon)' }
+  ].forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    terrainSelect.appendChild(o);
+  });
+  terrainSelect.onchange = () => selectTerrainFormat(terrainSelect.value);
+  nav.appendChild(terrainSelect);
+
+  // Layout dropdown
+  const layoutLabel = document.createElement('span');
+  layoutLabel.className = 'nav-label';
+  layoutLabel.textContent = 'Layout:';
+  nav.appendChild(layoutLabel);
+
+  const layoutSelect = document.createElement('select');
+  layoutSelect.className = 'nav-select';
+  layoutSelect.id = 'layoutSelect';
+  nav.appendChild(layoutSelect);
+  layoutSelect.onchange = () => selectLayout(parseInt(layoutSelect.value));
+
+  populateLayoutDropdown();
+
+  // About link
+  const about = document.createElement('a');
+  about.href = 'about.html';
+  about.className = 'nav-link';
+  about.textContent = 'About';
+  nav.appendChild(about);
+
+  // Feedback link
+  const feedback = document.createElement('a');
+  feedback.href = 'mailto:nwimmer123@yahoo.com?subject=TacticalDropz Feedback';
+  feedback.className = 'nav-link';
+  feedback.textContent = '📧 Feedback';
+  nav.appendChild(feedback);
+}
+
+function populateLayoutDropdown() {
+  const sel = document.getElementById('layoutSelect');
+  sel.innerHTML = '';
+
+  if (currentTerrainFormat === 'gw') {
+    for (let i = 1; i <= 8; i++) {
+      const o = document.createElement('option');
+      o.value = i - 1;
+      o.textContent = `Layout ${i}`;
+      sel.appendChild(o);
+    }
+  } else if (currentTerrainFormat === 'wtc' && wtcData) {
+    wtcData.layouts.forEach((layout, i) => {
+      const o = document.createElement('option');
+      o.value = i;
+      o.textContent = layout.name;
+      sel.appendChild(o);
     });
+  } else if (currentTerrainFormat === 'uktc' && uktcData) {
+    uktcData.layouts.forEach((layout, i) => {
+      const o = document.createElement('option');
+      o.value = i;
+      o.textContent = layout.name;
+      sel.appendChild(o);
+    });
+  }
 
-    function isPointInUnit(x, y, unit) {
-      // Point-in-polygon algorithm
-      let inside = false;
-      const points = unit.points;
-      
-      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-        const xi = points[i].x, yi = points[i].y;
-        const xj = points[j].x, yj = points[j].y;
-        
-        const intersect = ((yi > y) !== (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
+  currentLayoutIndex = 0;
+  sel.value = 0;
+}
+
+function buildMissionSidebar() {
+  const sidebar = document.getElementById('leftSidebar');
+  sidebar.innerHTML = '<div class="sidebar-header">Mission</div>';
+  deployments.forEach(mission => {
+    const opt = document.createElement('div');
+    opt.className = `deploy-option ${mission === currentMission ? 'active' : ''}`;
+    opt.textContent = mission.name;
+    opt.dataset.id = mission.id;
+    opt.onclick = () => selectMission(mission.id);
+    sidebar.appendChild(opt);
+  });
+}
+
+function bindToolbar() {
+  document.querySelectorAll('[data-tool]').forEach(btn => {
+    btn.onclick = () => selectTool(btn.dataset.tool);
+  });
+  document.querySelectorAll('.color-swatch').forEach(swatch => {
+    swatch.onclick = () => selectColor(swatch.dataset.color);
+  });
+}
+
+function bindCanvas() {
+  canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('mousemove', handleMouseMove);
+  canvas.addEventListener('dblclick', handleDoubleClick);
+  canvas.addEventListener('mouseup', handleMouseUp);
+  canvas.addEventListener('mouseleave', handleMouseUp);
+}
+
+// ─── Selection Handlers ───────────────────────────────────────────────────────
+function selectTerrainFormat(format) {
+  currentTerrainFormat = format;
+  currentLayoutIndex = 0;
+  populateLayoutDropdown();
+  drawScene();
+}
+
+function selectLayout(index) {
+  currentLayoutIndex = index;
+  drawScene();
+}
+
+function selectMission(id) {
+  currentMission = deployments.find(d => d.id === id);
+  document.querySelectorAll('.deploy-option').forEach(o => {
+    o.classList.toggle('active', o.dataset.id === id);
+  });
+  drawScene();
+}
+
+function selectTool(tool) {
+  currentTool = tool;
+  currentPoints = [];
+  measurePoints = [];
+  hideDrawingHint();
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-tool="${tool}"]`);
+  if (btn) btn.classList.add('active');
+  drawScene();
+}
+
+function selectColor(color) {
+  currentColor = color;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  const sw = document.querySelector(`[data-color="${color}"]`);
+  if (sw) sw.classList.add('active');
+}
+
+// ─── Coordinate Helpers ───────────────────────────────────────────────────────
+function i2p(inches) { return inches * IPX; }
+function p2i(px) { return px / IPX; }
+
+// Convert an array of [x,y] inch pairs to pixel {x,y} objects
+function inchPointsToPx(pts) {
+  return pts.map(([x, y]) => ({ x: i2p(x), y: i2p(y) }));
+}
+
+// ─── WTC L-Shape Geometry ─────────────────────────────────────────────────────
+// Given four corners (in pixels, clockwise from TL) and a facing compass point,
+// returns the 6 polygon points (in pixels) of the L-shape wall footprint.
+// The facing indicates which corner of the bounding rect the solid L corner sits in.
+//
+// corners: [TL, TR, BR, BL] as {x,y} pixel objects (after any rotation, but since
+// we store actual grid coords, they come in as axis-aligned for now)
+//
+// We treat corners[0]=TL, [1]=TR, [2]=BR, [3]=BL.
+// facing NW → solid corner at TL (corners[0])
+// facing NE → solid corner at TR (corners[1])
+// facing SE → solid corner at BR (corners[2])
+// facing SW → solid corner at BL (corners[3])
+
+function buildLPolygon(corners, facing, pieceType) {
+  const lib = WTC_PIECES[pieceType];
+  if (!lib || !lib.armLong) return null;
+
+  // corners in order: provide as [[x,y],...] in inches, we get px here
+  const [TL, TR, BR, BL] = corners; // {x,y} in pixels
+
+  // Edge vectors
+  const topLen    = dist(TL, TR);
+  const leftLen   = dist(TL, BL);
+
+  const t = lib.wallThickness * IPX; // wall thickness in px
+  const aL = lib.armLong * IPX;      // arm along long edge
+  const aS = lib.armShort * IPX;     // arm along short edge
+
+  // Unit vectors along each edge from the solid corner
+  function unitVec(from, to) {
+    const d = dist(from, to);
+    return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
+  }
+
+  function addVec(pt, vec, len) {
+    return { x: pt.x + vec.x * len, y: pt.y + vec.y * len };
+  }
+
+  // Determine which corner is solid and the two edges emanating from it
+  // longEdge goes along the longer dimension, shortEdge along the shorter
+  let solidCorner, longNeighbor, shortNeighbor;
+
+  const isWide = topLen >= leftLen; // true if top edge is the long edge
+
+  switch (facing) {
+    case 'NW':
+      solidCorner  = TL;
+      longNeighbor  = isWide ? TR : BL;
+      shortNeighbor = isWide ? BL : TR;
+      break;
+    case 'NE':
+      solidCorner  = TR;
+      longNeighbor  = isWide ? TL : BR;
+      shortNeighbor = isWide ? BR : TL;
+      break;
+    case 'SE':
+      solidCorner  = BR;
+      longNeighbor  = isWide ? BL : TR;
+      shortNeighbor = isWide ? TR : BL;
+      break;
+    case 'SW':
+      solidCorner  = BL;
+      longNeighbor  = isWide ? BR : TL;
+      shortNeighbor = isWide ? TL : BR;
+      break;
+    default:
+      return null;
+  }
+
+  const uvLong  = unitVec(solidCorner, longNeighbor);
+  const uvShort = unitVec(solidCorner, shortNeighbor);
+
+  // 6 points of the L (clockwise from solid corner):
+  // P0: solidCorner
+  // P1: along long arm, full length
+  // P2: inward by wall thickness
+  // P3: back toward solid corner along inner long edge, to where short arm ends
+  // P4: inward along short arm at inner depth
+  // P5: along short arm, full length from solid corner
+
+  const P0 = solidCorner;
+  const P1 = addVec(P0, uvLong, aL);
+  const P2 = addVec(P1, uvShort, t);
+  const P3 = addVec(P0, uvLong, t); // move along long by wall thickness to find inner corner junction
+  const P4 = addVec(P3, uvShort, aS - t); // this completes the inner corner
+  const P5 = addVec(P0, uvShort, aS);
+
+  // Hmm — let me use a cleaner formulation:
+  // The L shape has an outer path along two arms and an inner concave corner.
+  // Outer: solidCorner -> end of long arm -> (turn inward t) -> inner long -> inner corner -> inner short -> end of short arm -> solidCorner
+
+  const outerLongEnd   = addVec(P0, uvLong,  aL);
+  const outerShortEnd  = addVec(P0, uvShort, aS);
+  const innerLongEnd   = addVec(outerLongEnd,  uvShort, t);
+  const innerShortEnd  = addVec(outerShortEnd, uvLong,  t);
+  const innerCorner    = addVec(P0, uvLong, t);
+  const innerCornerFull = addVec(innerCorner, uvShort, t);
+
+  return [P0, outerLongEnd, innerLongEnd, innerShortEnd, outerShortEnd];
+  // Note: this gives a 5-point L (no inner corner detail needed for top-down view)
+  // For a cleaner L with visible inner corner:
+}
+
+// Cleaner L polygon — 6 points
+function buildLPolygonClean(cornersPx, facing, pieceType) {
+  const lib = WTC_PIECES[pieceType];
+  if (!lib || !lib.armLong) return null;
+
+  const [TL, TR, BR, BL] = cornersPx;
+  const topLen  = dist(TL, TR);
+  const leftLen = dist(TL, BL);
+  const isWide  = topLen >= leftLen;
+
+  const t  = lib.wallThickness * IPX;
+  const aL = lib.armLong  * IPX;
+  const aS = lib.armShort * IPX;
+
+  function uv(from, to) {
+    const d = dist(from, to);
+    return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
+  }
+  function av(pt, vec, len) {
+    return { x: pt.x + vec.x * len, y: pt.y + vec.y * len };
+  }
+
+  let C, longN, shortN;
+  switch (facing) {
+    case 'NW': C = TL; longN = isWide ? TR : BL; shortN = isWide ? BL : TR; break;
+    case 'NE': C = TR; longN = isWide ? TL : BR;  shortN = isWide ? BR : TL; break;
+    case 'SE': C = BR; longN = isWide ? BL : TR;  shortN = isWide ? TR : BL; break;
+    case 'SW': C = BL; longN = isWide ? BR : TL;  shortN = isWide ? TL : BR; break;
+    default: return null;
+  }
+
+  const uvL = uv(C, longN);
+  const uvS = uv(C, shortN);
+
+  // 6 outer points of L walking clockwise from solid corner:
+  const p0 = C;                          // solid corner
+  const p1 = av(C,  uvL, aL);            // end of long arm (outer)
+  const p2 = av(p1, uvS, t);             // end of long arm (inner)
+  const p3 = av(av(C, uvL, t), uvS, t);  // inner corner junction
+  const p4 = av(av(C, uvS, aS), uvL, t); // end of short arm (inner)
+  const p5 = av(C,  uvS, aS);            // end of short arm (outer)
+
+  return [p0, p1, p2, p3, p4, p5];
+}
+
+function dist(a, b) {
+  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+}
+
+// Convert piece corners from inches to px {x,y} objects
+// corners stored as [[x,y],[x,y],[x,y],[x,y]] clockwise from TL
+function cornersToPx(corners) {
+  return corners.map(([x, y]) => ({ x: i2p(x), y: i2p(y) }));
+}
+
+// ─── LOS Intersection ─────────────────────────────────────────────────────────
+// Test if segment (p1->p2) intersects segment (p3->p4), return t param or null
+function segmentIntersect(p1, p2, p3, p4) {
+  const d1 = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const d2 = { x: p4.x - p3.x, y: p4.y - p3.y };
+  const cross = d1.x * d2.y - d1.y * d2.x;
+  if (Math.abs(cross) < 1e-10) return null; // parallel
+  const t = ((p3.x - p1.x) * d2.y - (p3.y - p1.y) * d2.x) / cross;
+  const u = ((p3.x - p1.x) * d1.y - (p3.y - p1.y) * d1.x) / cross;
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return t;
+  return null;
+}
+
+// Given a LOS ray from start to end, find the nearest intersection with all
+// WTC terrain piece bounding rectangles. Returns the clipped endpoint.
+function clipLosToTerrain(start, end) {
+  if (currentTerrainFormat !== 'wtc') return end;
+
+  const layoutData = getWtcLayoutData();
+  if (!layoutData || !layoutData.pieces.length) return end;
+
+  let minT = 1;
+
+  layoutData.pieces.forEach(piece => {
+    const corners = cornersToPx(piece.corners);
+    // Bounding rect edges: TL-TR, TR-BR, BR-BL, BL-TL
+    const edges = [
+      [corners[0], corners[1]],
+      [corners[1], corners[2]],
+      [corners[2], corners[3]],
+      [corners[3], corners[0]]
+    ];
+    edges.forEach(([a, b]) => {
+      const t = segmentIntersect(start, end, a, b);
+      if (t !== null && t > 0.001 && t < minT) minT = t;
+    });
+  });
+
+  return {
+    x: start.x + (end.x - start.x) * minT,
+    y: start.y + (end.y - start.y) * minT
+  };
+}
+
+function getWtcLayoutData() {
+  if (!wtcData) return null;
+  return wtcData.layouts[currentLayoutIndex] || null;
+}
+
+// ─── Draw Scene ───────────────────────────────────────────────────────────────
+function drawScene() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawBackground();
+  drawGrid();
+  drawDeploymentZones();
+  drawObjectives();
+  drawTerrain();
+  drawUserDrawings();
+  drawInProgressPoints();
+}
+
+function drawBackground() {
+  if (currentTerrainFormat === 'gw') {
+    const img = terrainImages[currentLayoutIndex];
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return;
+    }
+  }
+  // Blank board for WTC / UKTC / GW image not loaded
+  ctx.fillStyle = '#1a2030';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawGrid() {
+  // 1" grid = 15px
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= canvas.width; x += IPX) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= canvas.height; y += IPX) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+  // 6" major grid lines slightly brighter
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 0.75;
+  for (let x = 0; x <= canvas.width; x += IPX * 6) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= canvas.height; y += IPX * 6) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+}
+
+function drawDeploymentZones() {
+  if (!currentMission) return;
+  currentMission.zones.forEach(zone => {
+    const pts = inchPointsToPx(zone.points);
+    ctx.beginPath();
+    pts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+    ctx.closePath();
+    ctx.fillStyle = zone.color;
+    ctx.fill();
+    ctx.strokeStyle = zone.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+}
+
+function drawObjectives() {
+  if (!currentMission) return;
+  currentMission.objectives.forEach(obj => {
+    const x = i2p(obj.x);
+    const y = i2p(obj.y);
+    const r = i2p(3); // 3" objective radius
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Center dot
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawTerrain() {
+  if (currentTerrainFormat === 'gw') return; // GW uses background image
+
+  let layoutData = null;
+  if (currentTerrainFormat === 'wtc') layoutData = getWtcLayoutData();
+  else if (currentTerrainFormat === 'uktc' && uktcData) {
+    layoutData = uktcData.layouts[currentLayoutIndex] || null;
+  }
+  if (!layoutData || !layoutData.pieces.length) return;
+
+  layoutData.pieces.forEach(piece => drawTerrainPiece(piece));
+}
+
+function drawTerrainPiece(piece) {
+  const lib = WTC_PIECES[piece.shape];
+  if (!lib) return;
+
+  const cornersPx = cornersToPx(piece.corners);
+  const [TL, TR, BR, BL] = cornersPx;
+
+  // Draw bounding rectangle (terrain footprint — used for LOS)
+  ctx.beginPath();
+  ctx.moveTo(TL.x, TL.y);
+  ctx.lineTo(TR.x, TR.y);
+  ctx.lineTo(BR.x, BR.y);
+  ctx.lineTo(BL.x, BL.y);
+  ctx.closePath();
+  ctx.fillStyle = lib.fillColor;
+  ctx.fill();
+  ctx.strokeStyle = lib.strokeColor;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Draw L-shape overlay for ruin types
+  if (piece.facing && lib.wallColor) {
+    const lPts = buildLPolygonClean(cornersPx, piece.facing, piece.shape);
+    if (lPts) {
+      ctx.beginPath();
+      lPts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.closePath();
+      ctx.fillStyle = lib.wallColor;
+      ctx.fill();
+      ctx.strokeStyle = lib.strokeColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Label
+  if (lib.label) {
+    const cx = (TL.x + TR.x + BR.x + BL.x) / 4;
+    const cy = (TL.y + TR.y + BR.y + BL.y) / 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(lib.label, cx, cy);
+  }
+}
+
+function drawUserDrawings() {
+  drawings.forEach(drawing => {
+    if (drawing.type === 'unit') drawUnit(drawing);
+    else if (drawing.type === 'measure') drawMeasure(drawing);
+    else if (drawing.type === 'sight') drawSight(drawing);
+    else if (drawing.type === 'label') drawLabel(drawing);
+  });
+}
+
+function drawUnit(drawing) {
+  ctx.strokeStyle = drawing.color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  drawing.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+  ctx.closePath();
+  ctx.stroke();
+
+  if (drawing.label) {
+    const cx = drawing.points.reduce((s, p) => s + p.x, 0) / drawing.points.length;
+    const cy = drawing.points.reduce((s, p) => s + p.y, 0) / drawing.points.length;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const tw = ctx.measureText(drawing.label).width;
+    ctx.fillRect(cx - tw / 2 - 4, cy - 8, tw + 8, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(drawing.label, cx, cy + 1);
+  }
+}
+
+function drawMeasure(drawing) {
+  const { start, end } = drawing;
+  ctx.strokeStyle = '#ff8800';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const inches = (Math.sqrt(dx * dx + dy * dy) / IPX).toFixed(1);
+  const mx = (start.x + end.x) / 2, my = (start.y + end.y) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(mx - 26, my - 12, 52, 22);
+  ctx.fillStyle = '#ff8800';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${inches}"`, mx, my + 1);
+
+  [start, end].forEach(pt => {
+    ctx.fillStyle = '#ff8800';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawSight(drawing) {
+  const { start, end } = drawing;
+  ctx.strokeStyle = '#00aaff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  const blocked = end._clipped;
+  if (blocked) {
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✕', end.x, end.y);
+  }
+
+  [start, end].forEach(pt => {
+    ctx.fillStyle = '#00aaff';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawLabel(drawing) {
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(drawing.text).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(drawing.x - tw / 2 - 8, drawing.y - 14, tw + 16, 28);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(drawing.text, drawing.x, drawing.y);
+}
+
+function drawInProgressPoints() {
+  if (currentPoints.length === 0 || currentTool !== 'draw') return;
+  ctx.strokeStyle = currentColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  currentPoints.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+  ctx.stroke();
+  currentPoints.forEach(pt => {
+    ctx.fillStyle = currentColor;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ─── Canvas Event Handlers ────────────────────────────────────────────────────
+function getCanvasPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height)
+  };
+}
+
+function isPointInUnit(x, y, unit) {
+  let inside = false;
+  const pts = unit.points;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function handleMouseDown(e) {
+  const { x, y } = getCanvasPoint(e);
+
+  if (currentTool === 'draw') {
+    for (let i = drawings.length - 1; i >= 0; i--) {
+      if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
+        selectedUnit = i;
+        isDragging = true;
+        const cx = drawings[i].points.reduce((s, p) => s + p.x, 0) / drawings[i].points.length;
+        const cy = drawings[i].points.reduce((s, p) => s + p.y, 0) / drawings[i].points.length;
+        dragOffset = { x: x - cx, y: y - cy };
+        canvas.style.cursor = 'grabbing';
+        return;
       }
-      
-      return inside;
+    }
+    if (currentPoints.length === 0 && !drawingHintShown) showDrawingHint();
+    currentPoints.push({ x, y });
+    drawScene();
+
+  } else if (currentTool === 'measure') {
+    if (measurePoints.length === 0) {
+      measurePoints.push({ x, y });
+    } else {
+      drawings.push({ type: 'measure', start: measurePoints[0], end: { x, y } });
+      measurePoints = [];
+      drawScene();
     }
 
-    function updateUnitsList() {
-      const unitsList = document.getElementById('unitsList');
-      unitsList.innerHTML = '';
-      
-      drawings.forEach((drawing, index) => {
-        if (drawing.type === 'unit') {
-          const unitItem = document.createElement('div');
-          unitItem.className = 'unit-item';
-          
-          const colorDot = document.createElement('div');
-          colorDot.className = 'unit-color-dot';
-          colorDot.style.backgroundColor = drawing.color;
-          
-          const label = document.createElement('span');
-          label.textContent = drawing.label || 'Unit';
-          label.style.flex = '1';
-          
-          // Delete button
-          const deleteBtn = document.createElement('span');
-          deleteBtn.textContent = '🗑️';
-          deleteBtn.className = 'unit-action-btn';
-          deleteBtn.title = 'Delete unit';
-          deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (confirm(`Delete "${drawing.label || 'Unit'}"?`)) {
-              drawings.splice(index, 1);
-              drawScene();
-              updateUnitsList();
-            }
-          };
-          
-          unitItem.appendChild(colorDot);
-          unitItem.appendChild(label);
-          unitItem.appendChild(deleteBtn);
-          
-          // Click anywhere else to edit
-          unitItem.addEventListener('click', (e) => {
-            if (e.target === deleteBtn) return;
-            const newLabel = prompt('Edit unit name:', drawing.label || 'Unit');
-            if (newLabel !== null && newLabel.trim() !== '') {
-              drawings[index].label = newLabel.trim();
-              drawScene();
-              updateUnitsList();
-            }
-          });
-          
-          unitsList.appendChild(unitItem);
-        }
-      });
+  } else if (currentTool === 'sight') {
+    if (measurePoints.length === 0) {
+      measurePoints.push({ x, y });
+    } else {
+      const start = measurePoints[0];
+      const rawEnd = { x, y };
+      const clippedEnd = clipLosToTerrain(start, rawEnd);
+      const wasClipped = clippedEnd.x !== rawEnd.x || clippedEnd.y !== rawEnd.y;
+      if (wasClipped) clippedEnd._clipped = true;
+      drawings.push({ type: 'sight', start, end: clippedEnd });
+      measurePoints = [];
+      drawScene();
     }
 
-    function resizeCanvas() {
-      const wrapper = document.getElementById('canvasWrapper');
-      const canvas = document.getElementById('battlefield');
-      
-      const wrapperWidth = wrapper.clientWidth - 40; // Subtract padding
-      const wrapperHeight = wrapper.clientHeight - 40;
-      
-      const canvasRatio = 900 / 720; // 1.25
-      const wrapperRatio = wrapperWidth / wrapperHeight;
-      
-      if (wrapperRatio > canvasRatio) {
-        // Wrapper is wider, fit to height
-        canvas.style.height = wrapperHeight + 'px';
-        canvas.style.width = (wrapperHeight * canvasRatio) + 'px';
-      } else {
-        // Wrapper is taller, fit to width
-        canvas.style.width = wrapperWidth + 'px';
-        canvas.style.height = (wrapperWidth / canvasRatio) + 'px';
-      }
+  } else if (currentTool === 'label') {
+    const text = prompt('Enter label text:');
+    if (text) {
+      drawings.push({ type: 'label', x, y, text });
+      drawScene();
     }
+  }
+}
 
-    function inchesToPixels(inches, rate){
-      return (inches * rate);
+function handleMouseMove(e) {
+  const { x, y } = getCanvasPoint(e);
+
+  if (isDragging && selectedUnit !== null) {
+    const unit = drawings[selectedUnit];
+    const cx = unit.points.reduce((s, p) => s + p.x, 0) / unit.points.length;
+    const cy = unit.points.reduce((s, p) => s + p.y, 0) / unit.points.length;
+    const dx = x - dragOffset.x - cx;
+    const dy = y - dragOffset.y - cy;
+    unit.points.forEach(pt => { pt.x += dx; pt.y += dy; });
+    drawScene();
+    return;
+  }
+
+  if (currentTool === 'draw' && !isDragging && currentPoints.length === 0) {
+    let over = false;
+    for (let i = drawings.length - 1; i >= 0; i--) {
+      if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) { over = true; break; }
     }
+    canvas.style.cursor = over ? 'grab' : 'crosshair';
+  }
 
-    const deploymentZones = {
-      tippingPoint: {
-        name: 'Tipping Point',
-        zones: [
-          { 
-            points: [[0,0], [180,0], [180,360], [300,360], [300,720], [0,720]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[600,0], [900,0], [900,720], [720,720], [720, 360], [600, 360]], 
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(22, inchToPixel), y: inchesToPixels(10, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(38, inchToPixel), y: inchesToPixels(38, inchToPixel)},
-          {x: inchesToPixels(16, inchToPixel), y: inchesToPixels(34, inchToPixel)},
-          {x: inchesToPixels(44, inchToPixel), y: inchesToPixels(14, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(22, inchToPixel), y: inchesToPixels(8, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(38, inchToPixel), y: inchesToPixels(40, inchToPixel)},
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(38, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(10, inchToPixel)}
-        ]
-      },
-      hammerAnvil: {
-        name: 'Hammer and Anvil',
-        zones: [
-          { 
-            points: [[0, 0], [270, 0], [270, 720], [0,720]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[630, 0], [900, 0], [900, 720], [630, 720]], 
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(8, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(40, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(6, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(42, inchToPixel)},
-          {x: inchesToPixels(10, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(50, inchToPixel), y: inchesToPixels(24, inchToPixel)}
-        ]
-      },
-      searchDestroy: {
-        name: 'Search and Destroy',
-        zones: [
-          { 
-            points: [[450,0], [900,0], [900,360], [585,360], [450,225]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[0,360], [315,360], [450,495], [450,720], [0,720]], 
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(16, inchToPixel), y: inchesToPixels(12, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(44, inchToPixel), y: inchesToPixels(36, inchToPixel)},
-          {x: inchesToPixels(16, inchToPixel), y: inchesToPixels(36, inchToPixel)},
-          {x: inchesToPixels(44, inchToPixel), y: inchesToPixels(12, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(10, inchToPixel)},
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(38, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(10, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(38, inchToPixel)}
-        ]
-      },
-      crucibleBattle: {
-        name: 'Crucible of Battle',
-        zones: [
-          { 
-            points: [[0,0], [450,720], [0,720]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[450,0], [900,0], [900,720]],
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(22, inchToPixel), y: inchesToPixels(10, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(38, inchToPixel), y: inchesToPixels(38, inchToPixel)},
-          {x: inchesToPixels(16, inchToPixel), y: inchesToPixels(36, inchToPixel)},
-          {x: inchesToPixels(44, inchToPixel), y: inchesToPixels(12, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(20, inchToPixel), y: inchesToPixels(8, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(40, inchToPixel), y: inchesToPixels(40, inchToPixel)},
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(38, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(10, inchToPixel)}
-        ]
-      },
-      sweepingEngage: {
-        name: 'Sweeping Engagement',
-        zones: [
-          { 
-            points: [[0,0], [900,0], [900,210], [450,210], [450,120], [0,120]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[0,510], [450,510], [450, 600], [900,600], [900,720], [0,720]], 
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(18, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(30, inchToPixel)},
-          {x: inchesToPixels(40, inchToPixel), y: inchesToPixels(8, inchToPixel)},
-          {x: inchesToPixels(20, inchToPixel), y: inchesToPixels(40, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(10, inchToPixel), y: inchesToPixels(18, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(50, inchToPixel), y: inchesToPixels(30, inchToPixel)},
-          {x: inchesToPixels(42, inchToPixel), y: inchesToPixels(6, inchToPixel)},
-          {x: inchesToPixels(18, inchToPixel), y: inchesToPixels(42, inchToPixel)}
-        ]
-      },
-      dawnWar: {
-        name: 'Dawn of War',
-        zones: [
-          { 
-            points: [[0,0], [900,0], [900,180], [0,180]], 
-            color: 'rgba(255,107,107,0.25)',
-            stroke: 'rgba(255,107,107,0.6)'
-          },
-          { 
-            points: [[0,540], [900,540], [900,720], [0,720]], 
-            color: 'rgba(78,205,196,0.25)',
-            stroke: 'rgba(78,205,196,0.6)'
-          }
-        ],
-        objectivesIncursion: [
-          {x: inchesToPixels(14, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(46, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(8, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(40, inchToPixel)}
-        ],
-        objectivesStrikeForce: [
-          {x: inchesToPixels(10, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(50, inchToPixel), y: inchesToPixels(24, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(6, inchToPixel)},
-          {x: inchesToPixels(30, inchToPixel), y: inchesToPixels(42, inchToPixel)}
-        ]
+  if (measurePoints.length === 1 && (currentTool === 'measure' || currentTool === 'sight')) {
+    drawScene();
+    ctx.strokeStyle = currentTool === 'measure' ? 'rgba(255,136,0,0.5)' : 'rgba(0,170,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function handleDoubleClick(e) {
+  if (currentTool === 'draw' && currentPoints.length > 2) {
+    const unitName = document.getElementById('unitName').value || 'Unit';
+    drawings.push({ type: 'unit', points: [...currentPoints], color: currentColor, label: unitName });
+    currentPoints = [];
+    document.getElementById('unitName').value = '';
+    drawingHintShown = true;
+    hideDrawingHint();
+    drawScene();
+    updateUnitsList();
+  }
+}
+
+function handleMouseUp() {
+  if (isDragging) {
+    isDragging = false;
+    selectedUnit = null;
+    canvas.style.cursor = 'crosshair';
+    drawScene();
+  }
+}
+
+// ─── Units List ───────────────────────────────────────────────────────────────
+function updateUnitsList() {
+  const list = document.getElementById('unitsList');
+  list.innerHTML = '';
+  drawings.forEach((d, i) => {
+    if (d.type !== 'unit') return;
+    const item = document.createElement('div');
+    item.className = 'unit-item';
+
+    const dot = document.createElement('div');
+    dot.className = 'unit-color-dot';
+    dot.style.backgroundColor = d.color;
+
+    const lbl = document.createElement('span');
+    lbl.textContent = d.label || 'Unit';
+    lbl.style.flex = '1';
+
+    const del = document.createElement('span');
+    del.textContent = '🗑️';
+    del.className = 'unit-action-btn';
+    del.title = 'Delete';
+    del.onclick = ev => {
+      ev.stopPropagation();
+      if (confirm(`Delete "${d.label || 'Unit'}"?`)) {
+        drawings.splice(i, 1);
+        drawScene();
+        updateUnitsList();
       }
     };
 
-    function showDrawingHint() {
-      if (hintElement) return;
-      
-      const canvasWrapper = document.getElementById('canvasWrapper');
-      hintElement = document.createElement('div');
-      hintElement.className = 'drawing-hint';
-      hintElement.textContent = '👆 Drawing mode active - Double-click to finish';
-      canvasWrapper.appendChild(hintElement);
-    }
+    item.appendChild(dot);
+    item.appendChild(lbl);
+    item.appendChild(del);
+    item.onclick = ev => {
+      if (ev.target === del) return;
+      const n = prompt('Edit unit name:', d.label || 'Unit');
+      if (n !== null && n.trim()) { drawings[i].label = n.trim(); drawScene(); updateUnitsList(); }
+    };
+    list.appendChild(item);
+  });
+}
 
-    function hideDrawingHint() {
-      if (hintElement) {
-        hintElement.remove();
-        hintElement = null;
-      }
-    }
+// ─── Hints ────────────────────────────────────────────────────────────────────
+function showDrawingHint() {
+  if (hintElement) return;
+  const wrapper = document.getElementById('canvasWrapper');
+  hintElement = document.createElement('div');
+  hintElement.className = 'drawing-hint';
+  hintElement.textContent = '👆 Click to add points — Double-click to finish unit';
+  wrapper.appendChild(hintElement);
+}
 
-    function toggleMode() {
-      const toggle = document.getElementById('modeToggle');
-      gameMode = toggle.checked ? 'strikeForce' : 'incursion';
-      drawScene();
-    }
+function hideDrawingHint() {
+  if (hintElement) { hintElement.remove(); hintElement = null; }
+}
 
-    function init() {
-      const topNav = document.getElementById('topNav');
-      for (let i = 1; i <= 8; i++) {
-        const tab = document.createElement('button');
-        tab.className = `tab ${i === 1 ? 'active' : ''}`;
-        tab.textContent = `Layout ${i}`;
-        tab.dataset.layout = i - 1;
-        tab.onclick = () => selectLayout(i - 1);
-        topNav.appendChild(tab);
-      }
+// ─── Save / Load ──────────────────────────────────────────────────────────────
+function savePlan() {
+  const plan = {
+    version: 2,
+    mission: currentMission?.id,
+    terrainFormat: currentTerrainFormat,
+    layoutIndex: currentLayoutIndex,
+    drawings
+  };
+  const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().slice(0, 10);
+  a.download = `tacticaldropz-${currentMission?.id || 'plan'}-${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
-      const sidebar = document.getElementById('leftSidebar');
-      Object.keys(deploymentZones).forEach(key => {
-        const option = document.createElement('div');
-        option.className = `deploy-option ${key === 'tippingPoint' ? 'active' : ''}`;
-        option.textContent = deploymentZones[key].name;
-        option.dataset.deployment = key;
-        option.onclick = () => selectDeployment(key);
-        sidebar.appendChild(option);
-      });
-
-      document.querySelectorAll('[data-tool]').forEach(btn => {
-        btn.onclick = () => selectTool(btn.dataset.tool);
-      });
-
-      document.querySelectorAll('.color-swatch').forEach(swatch => {
-        swatch.onclick = () => selectColor(swatch.dataset.color);
-      });
-
-      canvas.addEventListener('mousedown', handleMouseDown);
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('dblclick', handleDoubleClick);
-      canvas.addEventListener('mouseup', handleMouseUp);        // Add these two
-      canvas.addEventListener('mouseleave', handleMouseUp);      
-
-      drawScene();
-      resizeCanvas();
-    }
-
-    function selectLayout(index) {
-      currentLayout = index;
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab')[index].classList.add('active');
-      drawScene();
-    }
-
-    function selectDeployment(deployment) {
-      currentDeployment = deployment;
-      document.querySelectorAll('.deploy-option').forEach(o => o.classList.remove('active'));
-      document.querySelector(`[data-deployment="${deployment}"]`).classList.add('active');
-      drawScene();
-    }
-
-    function selectTool(tool) {
-      currentTool = tool;
-      currentPoints = [];
-      measurePoints = [];
-      hideDrawingHint();
-      document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
-      document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
-      drawScene();
-    }
-
-    function selectColor(color) {
-      currentColor = color;
-      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-      document.querySelector(`[data-color="${color}"]`).classList.add('active');
-    }
-
-    function drawScene() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (terrainImages[currentLayout]) {
-        ctx.drawImage(terrainImages[currentLayout], 0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.fillStyle = '#2a2a3e';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-      
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= canvas.width; i += 45) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, canvas.height);
-        ctx.stroke();
-      }
-      for (let i = 0; i <= canvas.height; i += 45) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(canvas.width, i);
-        ctx.stroke();
-      }
-
-      const deployment = deploymentZones[currentDeployment];
-      if (deployment) {
-        deployment.zones.forEach(zone => {
-          ctx.fillStyle = zone.color;
-          ctx.strokeStyle = zone.stroke;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          zone.points.forEach((pt, i) => {
-            if (i === 0) ctx.moveTo(pt[0], pt[1]);
-            else ctx.lineTo(pt[0], pt[1]);
-          });
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        });
-
-        const objectives = gameMode === 'incursion' 
-          ? deployment.objectivesIncursion 
-          : deployment.objectivesStrikeForce;
-        
-        objectives.forEach(obj => {
-          ctx.strokeStyle = '#ff0000';
-          ctx.lineWidth = 3;
-          ctx.setLineDash([8, 8]);
-          ctx.beginPath();
-          ctx.arc(obj.x, obj.y, 45, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        });
-      }
-
-      drawings.forEach(drawing => {
-        if (drawing.type === 'unit') {
-          ctx.strokeStyle = drawing.color;
-          ctx.lineWidth = 3;
-          ctx.fillStyle = 'transparent';
-          ctx.beginPath();
-          drawing.points.forEach((pt, i) => {
-            if (i === 0) ctx.moveTo(pt.x, pt.y);
-            else ctx.lineTo(pt.x, pt.y);
-          });
-          ctx.closePath();
-          ctx.stroke();
-
-          if (drawing.label) {
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 14px sans-serif';
-            ctx.textAlign = 'center';
-            const centerX = drawing.points.reduce((sum, pt) => sum + pt.x, 0) / drawing.points.length;
-            const centerY = drawing.points.reduce((sum, pt) => sum + pt.y, 0) / drawing.points.length;
-            ctx.fillText(drawing.label, centerX, centerY + 25);
-          }
-        } else if (drawing.type === 'measure') {
-          ctx.strokeStyle = '#ff8800';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(drawing.start.x, drawing.start.y);
-          ctx.lineTo(drawing.end.x, drawing.end.y);
-          ctx.stroke();
-
-          const dx = drawing.end.x - drawing.start.x;
-          const dy = drawing.end.y - drawing.start.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const inches = (dist / 45 * 3).toFixed(1);
-          
-          ctx.fillStyle = '#ff8800';
-          ctx.font = 'bold 16px sans-serif';
-          ctx.textAlign = 'center';
-          const midX = (drawing.start.x + drawing.end.x) / 2;
-          const midY = (drawing.start.y + drawing.end.y) / 2;
-          
-          ctx.fillStyle = 'rgba(0,0,0,0.7)';
-          ctx.fillRect(midX - 25, midY - 15, 50, 24);
-          ctx.fillStyle = '#ff8800';
-          ctx.fillText(`${inches}"`, midX, midY + 4);
-
-          ctx.fillStyle = '#ff8800';
-          ctx.beginPath();
-          ctx.arc(drawing.start.x, drawing.start.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(drawing.end.x, drawing.end.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (drawing.type === 'sight') {
-          ctx.strokeStyle = '#0066cc';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(drawing.start.x, drawing.start.y);
-          ctx.lineTo(drawing.end.x, drawing.end.y);
-          ctx.stroke();
-
-          const dx = drawing.end.x - drawing.start.x;
-          const dy = drawing.end.y - drawing.start.y;
-          const midX = (drawing.start.x + drawing.end.x) / 2;
-          const midY = (drawing.start.y + drawing.end.y) / 2;
-          ctx.fillStyle = '#0066cc';
-          ctx.beginPath();
-          ctx.arc(drawing.start.x, drawing.start.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(drawing.end.x, drawing.end.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (drawing.type === 'label') {
-          ctx.fillStyle = 'rgba(0,0,0,0.8)';
-          const textWidth = ctx.measureText(drawing.text).width;
-          ctx.fillRect(drawing.x - textWidth/2 - 8, drawing.y - 14, textWidth + 16, 28);
-          ctx.fillStyle = '#fff';
-          ctx.font = '14px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(drawing.text, drawing.x, drawing.y);
+function loadPlan() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = e => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const plan = JSON.parse(ev.target.result);
+        if (plan.mission) selectMission(plan.mission);
+        if (plan.terrainFormat) {
+          currentTerrainFormat = plan.terrainFormat;
+          document.getElementById('terrainFormatSelect').value = plan.terrainFormat;
+          populateLayoutDropdown();
         }
-      });
-
-      if (currentPoints.length > 0 && currentTool === 'draw') {
-        ctx.strokeStyle = currentColor;
-        ctx.lineWidth = 3;
-        ctx.fillStyle = 'transparent';
-        ctx.beginPath();
-        currentPoints.forEach((pt, i) => {
-          if (i === 0) ctx.moveTo(pt.x, pt.y);
-          else ctx.lineTo(pt.x, pt.y);
-        });
-        ctx.stroke();
-
-        currentPoints.forEach(pt => {
-          ctx.fillStyle = currentColor;
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      }
-    }
-
-    function handleMouseDown(e) {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
-
-      // Check if clicking on a unit (in reverse order to get topmost unit)
-      if (currentTool === 'draw') {
-        for (let i = drawings.length - 1; i >= 0; i--) {
-          if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
-            selectedUnit = i;
-            isDragging = true;
-            
-            // Calculate center of unit
-            const centerX = drawings[i].points.reduce((sum, pt) => sum + pt.x, 0) / drawings[i].points.length;
-            const centerY = drawings[i].points.reduce((sum, pt) => sum + pt.y, 0) / drawings[i].points.length;
-            
-            dragOffset = { x: x - centerX, y: y - centerY };
-            canvas.style.cursor = 'grabbing';
-            return; // Don't start drawing a new unit
-          }
+        if (plan.layoutIndex !== undefined) {
+          currentLayoutIndex = plan.layoutIndex;
+          document.getElementById('layoutSelect').value = plan.layoutIndex;
         }
-        
-        // If not clicking on a unit, start drawing
-        if (currentPoints.length === 0 && !drawingHintShown) {
-          showDrawingHint();
-        }
-        currentPoints.push({x, y});
+        drawings = plan.drawings || [];
         drawScene();
-      } else if (currentTool === 'measure') {
-        if (measurePoints.length === 0) {
-          measurePoints.push({x, y});
-        } else {
-          drawings.push({
-            type: 'measure',
-            start: measurePoints[0],
-            end: {x, y}
-          });
-          measurePoints = [];
-          drawScene();
-        }
-      } else if (currentTool === 'objective') {
-        drawings.push({
-          type: 'objective',
-          x, y, r: 45
-        });
-        drawScene();
-      } else if (currentTool === 'sight') {
-        if (measurePoints.length === 0) {
-          measurePoints.push({x, y});
-        } else {
-          drawings.push({
-            type: 'sight',
-            start: measurePoints[0],
-            end: {x, y}
-          });
-          measurePoints = [];
-          drawScene();
-        }
-      } else if (currentTool === 'label') {
-        const text = prompt('Enter label text:');
-        if (text) {
-          drawings.push({
-            type: 'label',
-            x, y, text
-          });
-          drawScene();
-        }
+        updateUnitsList();
+      } catch (err) {
+        alert('Error loading plan: ' + err.message);
       }
-    }
+    };
+    reader.readAsText(e.target.files[0]);
+  };
+  input.click();
+}
 
-    function handleMouseMove(e) {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+// ─── Clear ────────────────────────────────────────────────────────────────────
+function clearCanvas() {
+  if (confirm('Clear all drawings?')) {
+    drawings = [];
+    currentPoints = [];
+    measurePoints = [];
+    drawingHintShown = false;
+    hideDrawingHint();
+    drawScene();
+    updateUnitsList();
+  }
+}
 
-      // Handle unit dragging
-      if (isDragging && selectedUnit !== null) {
-        const unit = drawings[selectedUnit];
-        
-        // Calculate current center
-        const oldCenterX = unit.points.reduce((sum, pt) => sum + pt.x, 0) / unit.points.length;
-        const oldCenterY = unit.points.reduce((sum, pt) => sum + pt.y, 0) / unit.points.length;
-        
-        // Calculate new center
-        const newCenterX = x - dragOffset.x;
-        const newCenterY = y - dragOffset.y;
-        
-        // Calculate offset
-        const dx = newCenterX - oldCenterX;
-        const dy = newCenterY - oldCenterY;
-        
-        // Move all points
-        unit.points.forEach(pt => {
-          pt.x += dx;
-          pt.y += dy;
-        });
-        
-        drawScene();
-        return;
-      }
+// ─── Resize ───────────────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const wrapper = document.getElementById('canvasWrapper');
+  const W = wrapper.clientWidth - 40;
+  const H = wrapper.clientHeight - 40;
+  const ratio = 900 / 720;
+  if (W / H > ratio) {
+    canvas.style.height = H + 'px';
+    canvas.style.width = (H * ratio) + 'px';
+  } else {
+    canvas.style.width = W + 'px';
+    canvas.style.height = (W / ratio) + 'px';
+  }
+}
 
-      // Handle cursor change when hovering over units in draw mode
-      if (currentTool === 'draw' && !isDragging && currentPoints.length === 0) {
-        let overUnit = false;
-        for (let i = drawings.length - 1; i >= 0; i--) {
-          if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
-            overUnit = true;
-            break;
-          }
-        }
-        canvas.style.cursor = overUnit ? 'grab' : 'crosshair';
-      }
-
-      // Handle measure tool preview
-      if (measurePoints.length === 1 && currentTool === 'measure') {
-        drawScene();
-        ctx.strokeStyle = 'rgba(255,136,0,0.5)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else if (measurePoints.length === 1 && currentTool === 'sight'){
-        drawScene();
-        ctx.strokeStyle = '#0066cc';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(measurePoints[0].x, measurePoints[0].y);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
-    function handleDoubleClick(e) {
-      if (currentTool === 'draw' && currentPoints.length > 2) {
-        const unitName = document.getElementById('unitName').value || 'Unit';
-        drawings.push({
-          type: 'unit',
-          points: [...currentPoints],
-          color: currentColor,
-          label: unitName
-        });
-        currentPoints = [];
-        document.getElementById('unitName').value = '';
-        drawingHintShown = true;
-        hideDrawingHint();
-        drawScene();
-        updateUnitsList(); // Add this line
-      }
-    }
-
-    function handleMouseUp(e) {
-      if (isDragging && selectedUnit !== null) {
-        isDragging = false;
-        selectedUnit = null;
-        canvas.style.cursor = 'crosshair';
-        drawScene();
-      }
-    }
-
-    function clearCanvas() {
-      if (confirm('Clear all drawings?')) {
-        drawings = [];
-        currentPoints = [];
-        measurePoints = [];
-        drawingHintShown = false;
-        hideDrawingHint();
-        drawScene();
-        updateUnitsList(); // Add this line
-      }
-    }
-
-    function savePlan() {
-      const plan = {
-        deployment: currentDeployment,
-        layout: currentLayout,
-        drawings: drawings,
-        gameMode: gameMode
-      };
-      const json = JSON.stringify(plan, null, 2);
-      const blob = new Blob([json], {type: 'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '40k-deployment-plan.json';
-      a.click();
-    }
-
-    function loadPlan() {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json';
-      input.onchange = e => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = event => {
-          try {
-            const plan = JSON.parse(event.target.result);
-            currentDeployment = plan.deployment || 'tippingPoint';
-            currentLayout = plan.layout || 0;
-            drawings = plan.drawings || [];
-            gameMode = plan.gameMode || 'incursion';
-            
-            document.getElementById('modeToggle').checked = (gameMode === 'strikeForce');
-            
-            selectDeployment(currentDeployment);
-            selectLayout(currentLayout);
-            drawScene();
-            updateUnitsList(); // Add this line
-          } catch (err) {
-            alert('Error loading plan: ' + err.message);
-          }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
-    }
-
-    init();
-
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('load', resizeCanvas);
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => { resizeCanvas(); drawScene(); });
+init();

@@ -1,0 +1,11 @@
+{
+  "format": "uktc",
+  "name": "UKTC",
+  "layouts": [
+    {
+      "id": "uktc_placeholder_1",
+      "name": "Layout 1 (placeholder)",
+      "pieces": []
+    }
+  ]
+}
