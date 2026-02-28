@@ -2,6 +2,14 @@
 const IPX = 15; // inches to pixels: 1" = 15px
 // Board: 60" x 48" = 900px x 720px
 
+// Sort an array of 4 {x,y} corner points geometrically into [TL, TR, BR, BL]
+function sortCorners(pts) {
+  const sorted = [...pts].sort((a, b) => a.y - b.y);
+  const top    = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+  const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
+  return [top[0], top[1], bottom[1], bottom[0]]; // TL, TR, BR, BL
+}
+
 // ─── WTC Piece Library ────────────────────────────────────────────────────────
 // All dimensions in inches. Arm lengths derived from official 2025/2026 WTC pack.
 // Footprint: 12"x6". Internal ruin: 9"x5". Wall thickness: 1.3" (33mm lower floor).
@@ -423,7 +431,7 @@ function buildLPolygon(corners, facing, pieceType) {
   if (!lib || !lib.armLong) return null;
 
   // corners in order: provide as [[x,y],...] in inches, we get px here
-  const [TL, TR, BR, BL] = corners; // {x,y} in pixels
+  const [TL, TR, BR, BL] = sortCorners(corners);
 
   // Edge vectors
   const topLen    = dist(TL, TR);
@@ -513,7 +521,9 @@ function buildLPolygonClean(cornersPx, facing, pieceType) {
   const lib = WTC_PIECES[pieceType];
   if (!lib || !lib.armLong) return null;
 
+  // Trust corner order from JSON: [TL, TR, BR, BL]
   const [TL, TR, BR, BL] = cornersPx;
+
   const topLen  = dist(TL, TR);
   const leftLen = dist(TL, BL);
   const isWide  = topLen >= leftLen;
@@ -530,25 +540,40 @@ function buildLPolygonClean(cornersPx, facing, pieceType) {
     return { x: pt.x + vec.x * len, y: pt.y + vec.y * len };
   }
 
+  // For each compass corner, identify the two adjacent neighbors.
+  // longN = whichever neighbor is further away (the 12" arm direction)
+  // shortN = whichever neighbor is closer (the 6" arm direction)
+  function pickLongShort(corner, n1, n2) {
+    return dist(corner, n1) >= dist(corner, n2)
+      ? { longN: n1, shortN: n2 }
+      : { longN: n2, shortN: n1 };
+  }
+
   let C, longN, shortN;
   switch (facing) {
-    case 'NW': C = TL; longN = isWide ? TR : BL; shortN = isWide ? BL : TR; break;
-    case 'NE': C = TR; longN = isWide ? TL : BR;  shortN = isWide ? BR : TL; break;
-    case 'SE': C = BR; longN = isWide ? BL : TR;  shortN = isWide ? TR : BL; break;
-    case 'SW': C = BL; longN = isWide ? BR : TL;  shortN = isWide ? TL : BR; break;
+    case 'NW': { C = TL; const r = pickLongShort(TL, TR, BL); longN = r.longN; shortN = r.shortN; break; }
+    case 'NE': { C = TR; const r = pickLongShort(TR, TL, BR); longN = r.longN; shortN = r.shortN; break; }
+    case 'SE': { C = BR; const r = pickLongShort(BR, BL, TR); longN = r.longN; shortN = r.shortN; break; }
+    case 'SW': { C = BL; const r = pickLongShort(BL, BR, TL); longN = r.longN; shortN = r.shortN; break; }
     default: return null;
   }
 
   const uvL = uv(C, longN);
   const uvS = uv(C, shortN);
 
-  // 6 outer points of L walking clockwise from solid corner:
-  const p0 = C;                          // solid corner
-  const p1 = av(C,  uvL, aL);            // end of long arm (outer)
-  const p2 = av(p1, uvS, t);             // end of long arm (inner)
-  const p3 = av(av(C, uvL, t), uvS, t);  // inner corner junction
-  const p4 = av(av(C, uvS, aS), uvL, t); // end of short arm (inner)
-  const p5 = av(C,  uvS, aS);            // end of short arm (outer)
+  // Shift the entire L 22mm inward from its two outer facing edges.
+  // The solid corner moves inward along both arm directions by 22mm.
+  // L dimensions (armLong, armShort, wallThickness) are unchanged.
+  const inset = (22 / 25.4) * IPX;
+  const C_ = av(av(C, uvL, inset), uvS, inset);
+
+  // 6 points of L — same shape, just shifted from C_:
+  const p0 = C_;                           // solid corner (shifted inward)
+  const p1 = av(C_,  uvL, aL);            // end of long arm (outer)
+  const p2 = av(p1,  uvS, t);             // end of long arm (inner)
+  const p3 = av(av(C_, uvL, t), uvS, t);  // inner corner junction
+  const p4 = av(av(C_, uvS, aS), uvL, t); // end of short arm (inner)
+  const p5 = av(C_,  uvS, aS);            // end of short arm (outer)
 
   return [p0, p1, p2, p3, p4, p5];
 }
@@ -678,21 +703,38 @@ function drawDeploymentZones() {
 
 function drawObjectives() {
   if (!currentMission) return;
+  // 40mm base = 1.57" radius. Zone extends 3" from base edge = 4.57" total radius.
+  const zoneR  = i2p(40 / 25.4 / 2 + 3); // ~4.57"
+  const baseR  = i2p(40 / 25.4 / 2);      // ~0.79" (40mm model base)
+
   currentMission.objectives.forEach(obj => {
     const x = i2p(obj.x);
     const y = i2p(obj.y);
-    const r = i2p(3); // 3" objective radius
+
+    // Outer zone — dashed red circle
     ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 6]);
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(x, y, zoneR, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // 40mm base — solid filled circle
+    ctx.fillStyle = 'rgba(255,51,51,0.25)';
+    ctx.beginPath();
+    ctx.arc(x, y, baseR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, baseR, 0, Math.PI * 2);
+    ctx.stroke();
+
     // Center dot
     ctx.fillStyle = '#ff3333';
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
     ctx.fill();
   });
 }
@@ -753,7 +795,7 @@ function drawTerrainPiece(piece) {
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(lib.label, cx, cy);
+    ctx.fillText(`${lib.label} [${piece.id}]`, cx, cy);
   }
 }
 

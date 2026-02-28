@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WTC Piece Helper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 24px; min-height: 100vh; }
+    h1 { color: #e94560; margin-bottom: 4px; font-size: 20px; }
+    .subtitle { color: #aaa; font-size: 13px; margin-bottom: 20px; }
+    .card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 18px; margin-bottom: 14px; max-width: 700px; }
+    .card h2 { font-size: 13px; color: #4ecdc4; margin-bottom: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    label { font-size: 12px; color: #aaa; width: 72px; flex-shrink: 0; }
+    .info { font-size: 11px; color: #555; }
+    input[type="number"], input[type="text"], select { padding: 6px 8px; background: #0f3460; border: 1px solid #1a508b; border-radius: 4px; color: #fff; font-size: 13px; outline: none; }
+    input[type="number"] { width: 70px; } input[type="text"] { width: 60px; } select { width: 120px; }
+    input:focus, select:focus { border-color: #e94560; }
+    .point-row { display: flex; gap: 6px; align-items: center; background: #0f3460; border: 1px solid #1a508b; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; }
+    .point-label { font-size: 12px; color: #e94560; font-weight: 600; width: 28px; flex-shrink: 0; }
+    .point-row select { width: 60px; } .point-row input[type="number"] { width: 62px; }
+    .sep { color: #555; font-size: 12px; }
+    .mode-tabs { display: flex; gap: 0; margin-bottom: 14px; }
+    .mode-tab { padding: 7px 16px; background: #0f3460; border: 1px solid #1a508b; color: #aaa; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+    .mode-tab:first-child { border-radius: 4px 0 0 4px; } .mode-tab:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+    .mode-tab.active { background: #e94560; border-color: #e94560; color: #fff; }
+    button { padding: 8px 18px; background: #e94560; border: none; border-radius: 4px; color: #fff; font-size: 13px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    button:hover { background: #c73652; }
+    button.secondary { background: #0f3460; border: 1px solid #1a508b; }
+    button.secondary:hover { background: #1a508b; }
+    .output { background: #0a0e1a; border: 1px solid #0f3460; border-radius: 4px; padding: 12px 14px; font-family: 'Consolas', monospace; font-size: 12px; color: #4ecdc4; white-space: pre-wrap; min-height: 40px; position: relative; margin-top: 12px; }
+    .copy-btn { position: absolute; top: 6px; right: 8px; padding: 3px 10px; font-size: 11px; background: #16213e; border: 1px solid #1a508b; border-radius: 3px; color: #aaa; cursor: pointer; }
+    .copy-btn:hover { color: #fff; border-color: #e94560; } .copy-btn.copied { color: #4ecdc4; border-color: #4ecdc4; }
+    .error { color: #ff6b6b; font-size: 12px; margin-top: 6px; }
+    .preview-canvas { margin-top: 12px; border: 1px solid #0f3460; border-radius: 4px; display: block; }
+    textarea { width: 100%; height: 130px; resize: vertical; padding: 8px; background: #0f3460; border: 1px solid #1a508b; border-radius: 4px; color: #fff; font-family: monospace; font-size: 12px; }
+    .divider { border: none; border-top: 1px solid #0f3460; margin: 10px 0; }
+    .q-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; font-size: 11px; }
+    .q-box { background: #0f3460; border: 1px solid #1a508b; border-radius: 4px; padding: 6px 10px; color: #aaa; }
+    .q-box strong { color: #e94560; }
+    code { color: #4ecdc4; }
+  </style>
+</head>
+<body>
+
+<h1>WTC Piece Helper</h1>
+<p class="subtitle">Compute 12×6" piece corners from two top-edge points. Supports absolute and quadrant coordinate modes.</p>
+
+<div class="card">
+  <h2>Single Piece</h2>
+
+  <div class="mode-tabs">
+    <div class="mode-tab active" id="tab-abs"  onclick="setMode('abs')">Absolute</div>
+    <div class="mode-tab"        id="tab-quad" onclick="setMode('quad')">Quadrant</div>
+  </div>
+
+  <div class="row">
+    <label>Piece ID</label>
+    <input type="text" id="pieceId" value="1">
+    <label style="width:50px;">Shape</label>
+    <select id="pieceShape">
+      <option value="wtc_three_storey">3-Storey</option>
+      <option value="wtc_two_storey">2-Storey</option>
+      <option value="wtc_container">Container</option>
+      <option value="wtc_prototype">Prototype</option>
+    </select>
+    <label style="width:46px;">Facing</label>
+    <select id="pieceFacing">
+      <option value="NW">NW</option><option value="NE">NE</option>
+      <option value="SW">SW</option><option value="SE">SE</option>
+      <option value="null">None</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label>Height</label>
+    <input type="number" id="pieceH" value="0" step="0.5" style="width:65px;">
+    <span class="info">0 = auto-detect from edge length · 6 ruins · 2.5 containers</span>
+  </div>
+
+  <hr class="divider">
+
+  <div id="mode-abs">
+    <div class="point-row">
+      <span class="point-label">TL</span>
+      <span class="sep">x</span><input type="number" id="abs-tlx" value="39" step="0.5">
+      <span class="sep">y</span><input type="number" id="abs-tly" value="3"  step="0.5">
+    </div>
+    <div class="point-row">
+      <span class="point-label">TR</span>
+      <span class="sep">x</span><input type="number" id="abs-trx" value="45" step="0.5">
+      <span class="sep">y</span><input type="number" id="abs-try" value="3"  step="0.5">
+    </div>
+  </div>
+
+  <div id="mode-quad" style="display:none">
+    <div class="q-legend">
+      <div class="q-box"><strong>Q1</strong> Top-left &nbsp;· x 0→30, y 0→22</div>
+      <div class="q-box"><strong>Q2</strong> Top-right · x 0→30 from right, y 0→22</div>
+      <div class="q-box"><strong>Q3</strong> Bot-left &nbsp;· x 0→30, y 0→22 from bottom</div>
+      <div class="q-box"><strong>Q4</strong> Bot-right · x 0→30 from right, y 0→22 from bottom</div>
+    </div>
+    <div class="point-row">
+      <span class="point-label">TL</span>
+      <select id="q-tl-q"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select>
+      <span class="sep">x</span><input type="number" id="q-tlx" value="15" step="0.5">
+      <span class="sep">y</span><input type="number" id="q-tly" value="3"  step="0.5">
+    </div>
+    <div class="point-row">
+      <span class="point-label">TR</span>
+      <select id="q-tr-q"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select>
+      <span class="sep">x</span><input type="number" id="q-trx" value="9"  step="0.5">
+      <span class="sep">y</span><input type="number" id="q-try" value="3"  step="0.5">
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="row">
+    <label>Mirror axis</label>
+    <select id="mirrorAxis">
+      <option value="none">No mirror</option>
+      <option value="y">Y-axis (left↔right)</option>
+      <option value="x">X-axis (top↔bottom)</option>
+      <option value="both">Both axes</option>
+    </select>
+    <label style="width:58px; margin-left:6px;">Mirror ID</label>
+    <input type="text" id="mirrorId" value="1M">
+    <label style="width:80px; margin-left:6px;">Mirror facing</label>
+    <select id="mirrorFacing">
+      <option value="auto">Auto</option>
+      <option value="NW">NW</option><option value="NE">NE</option>
+      <option value="SW">SW</option><option value="SE">SE</option>
+      <option value="null">None</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label>Flip depth</label>
+    <input type="checkbox" id="flipDepth" style="width:20px;height:20px;cursor:pointer;">
+    <span class="info">Check if the rectangle extends the wrong direction</span>
+  </div>
+
+  <div class="row" style="margin-top:4px;">
+    <button onclick="compute()">Compute</button>
+  </div>
+
+  <div id="error" class="error" style="display:none"></div>
+  <div id="outputWrap" style="display:none">
+    <div class="output" id="output">
+      <button class="copy-btn" id="copyBtn" onclick="copyEl('outputText','copyBtn')">Copy</button>
+      <span id="outputText"></span>
+    </div>
+    <canvas class="preview-canvas" id="preview" width="420" height="220"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Batch</h2>
+  <p class="info" style="margin-bottom:8px;">
+    One piece per line.<br>
+    Absolute: <code>id, shape, facing, tlx, tly, trx, try [,h]</code><br>
+    Quadrant: <code>id, shape, facing, Q#, tlx, tly, Q#, trx, try [,h]</code><br>
+    Mirror:   append <code>| mirrorId, axis(x/y/both), facing(or auto)</code>
+  </p>
+  <textarea id="batchInput" placeholder="1,  wtc_three_storey, SW, Q2, 15, 3,  Q2, 9,  3  | 1M, y, auto
+2,  wtc_three_storey, SW, Q2, 24, 18, Q2, 14, 20 | 2M, y, auto
+3,  wtc_three_storey, NW, Q1, 10, 13, Q1, 22, 13 | 3M, y, auto"></textarea>
+  <div class="row" style="margin-top:10px;">
+    <button onclick="computeBatch()">Compute Batch</button>
+  </div>
+  <div id="batchOutputWrap" style="display:none">
+    <div class="output">
+      <button class="copy-btn" id="batchCopyBtn" onclick="copyEl('batchOutputText','batchCopyBtn')">Copy</button>
+      <span id="batchOutputText"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+let inputMode = 'abs';
+
+function setMode(m) {
+  inputMode = m;
+  document.getElementById('mode-abs').style.display  = m==='abs'  ? 'block':'none';
+  document.getElementById('mode-quad').style.display = m==='quad' ? 'block':'none';
+  document.getElementById('tab-abs').classList.toggle('active',  m==='abs');
+  document.getElementById('tab-quad').classList.toggle('active', m==='quad');
+}
+
+function quadToAbs(q, qx, qy) {
+  switch(q) {
+    case 'Q1': return [qx,       qy];
+    case 'Q2': return [60-qx,    qy];
+    case 'Q3': return [qx,       44-qy];
+    case 'Q4': return [60-qx,    44-qy];
+    default: throw new Error('Unknown quadrant: '+q);
+  }
+}
+
+function getTopPoints() {
+  if (inputMode==='abs') {
+    return [
+      [parseFloat(document.getElementById('abs-tlx').value), parseFloat(document.getElementById('abs-tly').value)],
+      [parseFloat(document.getElementById('abs-trx').value), parseFloat(document.getElementById('abs-try').value)]
+    ];
+  } else {
+    return [
+      quadToAbs(document.getElementById('q-tl-q').value, parseFloat(document.getElementById('q-tlx').value), parseFloat(document.getElementById('q-tly').value)),
+      quadToAbs(document.getElementById('q-tr-q').value, parseFloat(document.getElementById('q-trx').value), parseFloat(document.getElementById('q-try').value))
+    ];
+  }
+}
+
+function r(n) { return parseFloat((Math.round(n*100)/100).toFixed(2)); }
+
+// Known piece dimensions [longEdge, shortEdge]
+const PIECE_DIMS = {
+  wtc_three_storey: [12, 6],
+  wtc_two_storey:   [12, 6],
+  wtc_container:    [5,  2.5],
+  wtc_prototype:    [6,  5]
+};
+
+// Convert facing from quadrant-space to absolute screen space
+// In Q2 the x-axis is flipped, so E<->W. In Q3 y-axis is flipped so N<->S. Q4 = both.
+function convertFacingToAbs(facing, quadrant) {
+  if (!quadrant || quadrant === 'Q1') return facing;
+  let f = facing;
+  if (quadrant === 'Q2' || quadrant === 'Q4') {
+    f = f.replace('E','_').replace('W','E').replace('_','W'); // flip E<->W
+  }
+  if (quadrant === 'Q3' || quadrant === 'Q4') {
+    f = f.replace('N','_').replace('S','N').replace('_','S'); // flip N<->S
+  }
+  return f;
+}
+
+// Determine dominant quadrant from two absolute points (use TL point)
+function absToQuadrant(ax, ay) {
+  const inRight  = ax > 30;
+  const inBottom = ay > 22;
+  if (!inRight && !inBottom) return 'Q1';
+  if ( inRight && !inBottom) return 'Q2';
+  if (!inRight &&  inBottom) return 'Q3';
+  return 'Q4';
+}
+
+function inferHeight(edgeLen, shape) {
+  const dims = PIECE_DIMS[shape] || [12, 6];
+  // Whichever dimension the input edge is closest to, return the other
+  const distToLong  = Math.abs(edgeLen - dims[0]);
+  const distToShort = Math.abs(edgeLen - dims[1]);
+  return distToLong <= distToShort ? dims[1] : dims[0];
+}
+
+function computeCorners(tl, tr, h, shape, flip) {
+  const [tlx,tly]=[tl[0],tl[1]], [trx,try_]=[tr[0],tr[1]];
+  const ex=trx-tlx, ey=try_-tly, len=Math.sqrt(ex*ex+ey*ey);
+  if(len<0.1) throw new Error('Points too close together');
+
+  const depth = (h === null || h === 0) ? inferHeight(len, shape) : h;
+
+  // Two possible perpendicular directions
+  const px1=-ey/len*depth, py1= ex/len*depth;
+  const px2= ey/len*depth, py2=-ex/len*depth;
+
+  // Default: pick perpendicular toward board center (30,22)
+  const midX=(tlx+trx)/2, midY=(tly+try_)/2;
+  const cx=30, cy=22;
+  const d1=Math.pow(midX+px1-cx,2)+Math.pow(midY+py1-cy,2);
+  const d2=Math.pow(midX+px2-cx,2)+Math.pow(midY+py2-cy,2);
+  let px,py;
+  if (flip) {
+    // User says default is wrong — use the other one
+    px=d1<d2?px2:px1; py=d1<d2?py2:py1;
+  } else {
+    px=d1<d2?px1:px2; py=d1<d2?py1:py2;
+  }
+
+  return {
+    TL:[tlx,tly],
+    TR:[trx,try_],
+    BR:[r(trx+px), r(try_+py)],
+    BL:[r(tlx+px), r(tly+py)]
+  };
+}
+
+function mirrorCorners(c, axis) {
+  const mx=x=>r(60-x), my=y=>r(44-y);
+  if(axis==='y')    return { TL:[mx(c.TR[0]),c.TR[1]], TR:[mx(c.TL[0]),c.TL[1]], BR:[mx(c.BL[0]),c.BL[1]], BL:[mx(c.BR[0]),c.BR[1]] };
+  if(axis==='x')    return { TL:[c.BL[0],my(c.BL[1])], TR:[c.BR[0],my(c.BR[1])], BR:[c.TR[0],my(c.TR[1])], BL:[c.TL[0],my(c.TL[1])] };
+  return { TL:[mx(c.BR[0]),my(c.BR[1])], TR:[mx(c.BL[0]),my(c.BL[1])], BR:[mx(c.TL[0]),my(c.TL[1])], BL:[mx(c.TR[0]),my(c.TR[1])] };
+}
+
+const MIRROR_FACING = {
+  y:    {NW:'NE',NE:'NW',SW:'SE',SE:'SW',null:'null'},
+  x:    {NW:'SW',NE:'SE',SW:'NW',SE:'NE',null:'null'},
+  both: {NW:'SE',NE:'SW',SW:'NE',SE:'NW',null:'null'}
+};
+
+function resolveMirrorFacing(f, axis, override) {
+  if(override && override!=='auto') return override;
+  return MIRROR_FACING[axis]?.[f] ?? f;
+}
+
+function pieceToJSON(id, shape, facing, c) {
+  const fv=(facing==='null'||facing===null)?'null':'"'+facing+'"';
+  return '{ "id": "'+id+'", "shape": "'+shape+'", "facing": '+fv+', "corners": [['+c.TL+'],['+c.TR+'],['+c.BR+'],['+c.BL+']] }';
+}
+
+function compute() {
+  try {
+    const id=document.getElementById('pieceId').value.trim();
+    const shape=document.getElementById('pieceShape').value;
+    const facing=document.getElementById('pieceFacing').value;
+    const h=parseFloat(document.getElementById('pieceH').value);
+    const axis=document.getElementById('mirrorAxis').value;
+    const mId=document.getElementById('mirrorId').value.trim();
+    const mFO=document.getElementById('mirrorFacing').value;
+    const [tl,tr]=getTopPoints();
+    const flip=document.getElementById('flipDepth').checked;
+    const corners=computeCorners(tl,tr,h===0?null:h,shape,flip);
+    // Convert facing from quadrant-space to absolute-space if in quadrant mode
+    const absFacing = inputMode === 'quad'
+      ? convertFacingToAbs(facing, absToQuadrant(tl[0], tl[1]))
+      : facing;
+    let lines=[pieceToJSON(id,shape,absFacing,corners)];
+    let mc=null;
+    if(axis!=='none') {
+      mc=mirrorCorners(corners,axis);
+      const mfAbs = inputMode === 'quad'
+        ? convertFacingToAbs(resolveMirrorFacing(absFacing,axis,mFO), absToQuadrant(mc.TL[0],mc.TL[1]))
+        : resolveMirrorFacing(absFacing,axis,mFO);
+      lines.push(pieceToJSON(mId,shape,mfAbs,mc));
+    }
+    showError(null);
+    showOutput(lines.join(',\n'), corners, mc);
+  } catch(e) { showError(e.message); }
+}
+
+function computeBatch() {
+  const lines=document.getElementById('batchInput').value.trim().split('\n');
+  const results=[];
+  lines.forEach((line,i) => {
+    line=line.trim(); if(!line||line.startsWith('//')) return;
+    try {
+      const [mainPart,mirrorPart]=line.split('|').map(s=>s.trim());
+      const parts=mainPart.split(',').map(s=>s.trim());
+      let id,shape,facing,tl,tr,h;
+      if(parts.some(p=>/^Q[1-4]$/.test(p))) {
+        id=parts[0];shape=parts[1];facing=parts[2];
+        tl=quadToAbs(parts[3],parseFloat(parts[4]),parseFloat(parts[5]));
+        tr=quadToAbs(parts[6],parseFloat(parts[7]),parseFloat(parts[8]));
+        h=parts[9]?parseFloat(parts[9]):6;
+      } else {
+        id=parts[0];shape=parts[1];facing=parts[2];
+        tl=[parseFloat(parts[3]),parseFloat(parts[4])];
+        tr=[parseFloat(parts[5]),parseFloat(parts[6])];
+        h=parts[7]?parseFloat(parts[7]):6;
+      }
+      const flip=document.getElementById('flipDepth').checked;
+    const corners=computeCorners(tl,tr,h===0?null:h,shape,flip);
+      results.push(pieceToJSON(id,shape,facing,corners));
+      if(mirrorPart) {
+        const mp=mirrorPart.split(',').map(s=>s.trim());
+        const mc=mirrorCorners(corners,mp[1]||'y');
+        results.push(pieceToJSON(mp[0],shape,resolveMirrorFacing(facing,mp[1]||'y',mp[2]||'auto'),mc));
+      }
+    } catch(e) { results.push('// Line '+(i+1)+' error: '+e.message); }
+  });
+  document.getElementById('batchOutputText').textContent=results.join(',\n');
+  document.getElementById('batchOutputWrap').style.display='block';
+}
+
+function showOutput(text, corners, mc) {
+  document.getElementById('outputText').textContent=text;
+  document.getElementById('outputWrap').style.display='block';
+  drawPreview(corners, mc);
+}
+
+function showError(msg) {
+  const el=document.getElementById('error');
+  el.style.display=msg?'block':'none';
+  if(msg) el.textContent=msg;
+}
+
+function drawPreview(corners, mirrorC) {
+  const canvas=document.getElementById('preview');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const allPts=[...Object.values(corners),...(mirrorC?Object.values(mirrorC):[])];
+  const xs=allPts.map(p=>p[0]),ys=allPts.map(p=>p[1]);
+  const minX=Math.min(...xs)-2,maxX=Math.max(...xs)+2,minY=Math.min(...ys)-2,maxY=Math.max(...ys)+2;
+  const pad=36;
+  const scale=Math.min((canvas.width-pad*2)/(maxX-minX||1),(canvas.height-pad*2)/(maxY-minY||1),14);
+  function px(x,y){return[(x-minX)*scale+pad,(y-minY)*scale+pad];}
+  ctx.fillStyle='#1a2030'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=0.5;
+  for(let x=Math.floor(minX);x<=Math.ceil(maxX);x++){const[x1,y1]=px(x,minY),[x2,y2]=px(x,maxY);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+  for(let y=Math.floor(minY);y<=Math.ceil(maxY);y++){const[x1,y1]=px(minX,y),[x2,y2]=px(maxX,y);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+  function drawRect(c,fill,stroke,lbl){
+    const pts=[c.TL,c.TR,c.BR,c.BL];
+    ctx.fillStyle=fill; ctx.strokeStyle=stroke; ctx.lineWidth=2;
+    ctx.beginPath(); pts.forEach(([x,y],i)=>{const[px_,py_]=px(x,y);i===0?ctx.moveTo(px_,py_):ctx.lineTo(px_,py_);}); ctx.closePath(); ctx.fill(); ctx.stroke();
+    const lbls=['TL','TR','BR','BL'];
+    pts.forEach(([x,y],i)=>{
+      const[px_,py_]=px(x,y);
+      ctx.fillStyle='#e94560'; ctx.beginPath(); ctx.arc(px_,py_,3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.font='9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(lbls[i]+'['+x+','+y+']',px_,py_-9);
+    });
+    const cx=pts.reduce((s,[x])=>s+x,0)/4,cy=pts.reduce((s,[,y])=>s+y,0)/4;
+    const[cpx,cpy]=px(cx,cy);
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(lbl,cpx,cpy);
+  }
+  drawRect(corners,'rgba(60,80,100,0.5)','rgba(120,160,200,0.9)','Piece');
+  if(mirrorC) drawRect(mirrorC,'rgba(80,60,100,0.5)','rgba(180,120,200,0.9)','Mirror');
+}
+
+function copyEl(textId,btnId){
+  navigator.clipboard.writeText(document.getElementById(textId).textContent).then(()=>{
+    const btn=document.getElementById(btnId);
+    btn.textContent='Copied!'; btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},1500);
+  });
+}
+
+document.getElementById('pieceId').addEventListener('input',function(){
+  const v=this.value.trim();
+  document.getElementById('mirrorId').value=v.endsWith('M')?v.slice(0,-1):v+'M';
+});
+
+document.addEventListener('keydown',e=>{if(e.key==='Enter') compute();});
+compute();
+</script>
+</body>
+</html>
