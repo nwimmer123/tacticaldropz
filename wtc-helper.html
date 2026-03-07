@@ -329,9 +329,10 @@ function compute() {
     let mc=null;
     if(axis!=='none') {
       mc=mirrorCorners(corners,axis);
-      const mfAbs = inputMode === 'quad'
-        ? convertFacingToAbs(resolveMirrorFacing(absFacing,axis,mFO), absToQuadrant(mc.TL[0],mc.TL[1]))
-        : resolveMirrorFacing(absFacing,axis,mFO);
+      // Mirror facing derives from the absolute facing — no quadrant conversion needed
+      const mfAbs = mFO && mFO !== 'auto'
+        ? mFO
+        : resolveMirrorFacing(absFacing, axis, 'auto');
       lines.push(pieceToJSON(mId,shape,mfAbs,mc));
     }
     showError(null);

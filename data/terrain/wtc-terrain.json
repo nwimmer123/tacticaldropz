@@ -10,11 +10,8 @@
           "name": "Layout 1",
           "pieces": [
             { "id": "1", "shape": "wtc_three_storey", "facing": "SW", "corners": [[39,3],[45,3],[45,15],[39,15]] },
-            { "id": "1M", "shape": "wtc_three_storey", "facing": "NE", "corners": [[15,29],[21,29],[21,42],[15,42]] },
-            { "id": "2", "shape": "wtc_two_storey", "facing": "NW", "corners": [[11.5,29],[6,30],[3.85,18.19],[9.35,17.19]] },
-            { "id": "2M", "shape": "wtc_two_storey", "facing": "SE", "corners": [[54,30],[48.5,29],[50.65,17.19],[56.15,18.19]] },
-            { "id": "3", "shape": "wtc_two_storey", "facing": "NW", "corners": [[33,23],[36,18],[46.29,24.17],[43.29,29.17]] },
-            { "id": "3M", "shape": "wtc_two_storey", "facing": "SE", "corners": [[24,18],[27,23],[16.71,29.17],[13.71,24.17]] }
+            { "id": "1M", "shape": "wtc_three_storey", "facing": "NE", "corners": [[15,29],[21,29],[21,41],[15,41]] },
+            { "id": "2", "shape": "wtc_three_storey", "facing": "SE", "corners": [[22,7],[34,7],[34,1],[22,1]] }
           ]
         },
         {

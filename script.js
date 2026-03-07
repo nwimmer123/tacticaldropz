@@ -1,6 +1,91 @@
+// ─── Modal System ─────────────────────────────────────────────────────────────
+// Replaces browser prompt/confirm/alert with styled in-app modals.
+// All functions return Promises so callers can await them.
+
+function showModal({ title, body, input, inputValue, inputPlaceholder, buttons }) {
+  return new Promise(resolve => {
+    const overlay  = document.getElementById('modalOverlay');
+    const titleEl  = document.getElementById('modalTitle');
+    const bodyEl   = document.getElementById('modalBody');
+    const inputEl  = document.getElementById('modalInput');
+    const actionsEl= document.getElementById('modalActions');
+
+    titleEl.textContent  = title || '';
+    bodyEl.textContent   = body  || '';
+    actionsEl.innerHTML  = '';
+
+    if (input) {
+      inputEl.style.display = 'block';
+      inputEl.value         = inputValue || '';
+      inputEl.placeholder   = inputPlaceholder || '';
+      setTimeout(() => { inputEl.focus(); inputEl.select(); }, 50);
+    } else {
+      inputEl.style.display = 'none';
+    }
+
+    buttons.forEach(btn => {
+      const el = document.createElement('button');
+      el.textContent = btn.label;
+      el.className   = `modal-btn ${btn.style || 'modal-btn-secondary'}`;
+      el.onclick = () => {
+        overlay.style.display = 'none';
+        resolve(btn.value !== undefined ? btn.value : (input ? inputEl.value : null));
+      };
+      actionsEl.appendChild(el);
+    });
+
+    // Enter key submits primary button
+    inputEl.onkeydown = e => {
+      if (e.key === 'Enter') {
+        const primary = buttons.find(b => b.style === 'modal-btn-primary');
+        if (primary) {
+          overlay.style.display = 'none';
+          resolve(input ? inputEl.value : primary.value);
+        }
+      }
+      if (e.key === 'Escape') {
+        overlay.style.display = 'none';
+        resolve(null);
+      }
+    };
+
+    overlay.style.display = 'flex';
+  });
+}
+
+function modalConfirm(title, body, confirmLabel = 'Confirm', danger = false) {
+  return showModal({
+    title, body,
+    buttons: [
+      { label: 'Cancel',       style: 'modal-btn-secondary', value: false },
+      { label: confirmLabel,   style: danger ? 'modal-btn-danger' : 'modal-btn-primary', value: true }
+    ]
+  });
+}
+
+function modalPrompt(title, body, defaultValue = '', placeholder = '') {
+  return showModal({
+    title, body,
+    input: true, inputValue: defaultValue, inputPlaceholder: placeholder,
+    buttons: [
+      { label: 'Cancel', style: 'modal-btn-secondary', value: null },
+      { label: 'OK',     style: 'modal-btn-primary' }
+    ]
+  });
+}
+
+function modalAlert(title, body) {
+  return showModal({
+    title, body,
+    buttons: [
+      { label: 'OK', style: 'modal-btn-primary', value: true }
+    ]
+  });
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const IPX = 15; // inches to pixels: 1" = 15px
-// Board: 60" x 48" = 900px x 720px
+// Board: 60" x 44" = 900px x 660px
 
 // Sort an array of 4 {x,y} corner points geometrically into [TL, TR, BR, BL]
 function sortCorners(pts) {
@@ -110,9 +195,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'tippingPoint', name: 'Tipping Point',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[0,0],[12,0],[12,24],[20,24],[20,48],[0,48]] },
+        points: [[0,0],[12,0],[12,22],[20,22],[20,44],[0,44]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[40,0],[60,0],[60,48],[48,48],[48,24],[40,24]] }
+        points: [[40,0],[60,0],[60,44],[48,44],[48,22],[40,22]] }
     ],
     objectives: [{x:22,y:10},{x:30,y:24},{x:38,y:38},{x:14,y:34},{x:46,y:14}]
   },
@@ -120,9 +205,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'hammerAnvil', name: 'Hammer and Anvil',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[0,0],[18,0],[18,48],[0,48]] },
+        points: [[0,0],[18,0],[18,44],[0,44]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[42,0],[60,0],[60,48],[42,48]] }
+        points: [[42,0],[60,0],[60,44],[42,44]] }
     ],
     objectives: [{x:30,y:6},{x:30,y:24},{x:30,y:42},{x:10,y:24},{x:50,y:24}]
   },
@@ -130,9 +215,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'searchDestroy', name: 'Search and Destroy',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[30,0],[60,0],[60,24],[39,24],[30,15]] },
+        points: [[30,0],[60,0],[60,22],[39,22],[30,14]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[0,24],[21,24],[30,33],[30,48],[0,48]] }
+        points: [[0,22],[21,22],[30,30],[30,44],[0,44]] }
     ],
     objectives: [{x:14,y:10},{x:14,y:38},{x:30,y:24},{x:46,y:10},{x:46,y:38}]
   },
@@ -140,9 +225,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'crucibleBattle', name: 'Crucible of Battle',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[0,0],[30,48],[0,48]] },
+        points: [[0,0],[30,44],[0,44]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[30,0],[60,0],[60,48]] }
+        points: [[30,0],[60,0],[60,44]] }
     ],
     objectives: [{x:20,y:8},{x:30,y:24},{x:40,y:40},{x:14,y:38},{x:46,y:10}]
   },
@@ -150,9 +235,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'sweepingEngage', name: 'Sweeping Engagement',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[0,0],[60,0],[60,14],[30,14],[30,8],[0,8]] },
+        points: [[0,0],[60,0],[60,13],[30,13],[30,7],[0,7]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[0,34],[30,34],[30,40],[60,40],[60,48],[0,48]] }
+        points: [[0,31],[30,31],[30,37],[60,37],[60,44],[0,44]] }
     ],
     objectives: [{x:10,y:18},{x:30,y:24},{x:50,y:30},{x:42,y:6},{x:18,y:42}]
   },
@@ -160,9 +245,9 @@ const FALLBACK_DEPLOYMENTS = [
     id: 'dawnWar', name: 'Dawn of War',
     zones: [
       { player: 1, color: 'rgba(255,107,107,0.25)', stroke: 'rgba(255,107,107,0.6)',
-        points: [[0,0],[60,0],[60,12],[0,12]] },
+        points: [[0,0],[60,0],[60,11],[0,11]] },
       { player: 2, color: 'rgba(78,205,196,0.25)', stroke: 'rgba(78,205,196,0.6)',
-        points: [[0,36],[60,36],[60,48],[0,48]] }
+        points: [[0,33],[60,33],[60,44],[0,44]] }
     ],
     objectives: [{x:10,y:24},{x:30,y:24},{x:50,y:24},{x:30,y:6},{x:30,y:42}]
   }
@@ -978,11 +1063,12 @@ function handleMouseDown(e) {
     }
 
   } else if (currentTool === 'label') {
-    const text = prompt('Enter label text:');
-    if (text) {
-      drawings.push({ type: 'label', x, y, text });
-      drawScene();
-    }
+    modalPrompt('Add Label', 'Enter label text:', '', 'Label text...').then(text => {
+      if (text && text.trim()) {
+        drawings.push({ type: 'label', x, y, text: text.trim() });
+        drawScene();
+      }
+    });
   }
 }
 
@@ -1066,11 +1152,13 @@ function updateUnitsList() {
     del.title = 'Delete';
     del.onclick = ev => {
       ev.stopPropagation();
-      if (confirm(`Delete "${d.label || 'Unit'}"?`)) {
-        drawings.splice(i, 1);
-        drawScene();
-        updateUnitsList();
-      }
+      modalConfirm('Delete Unit', `Delete "${d.label || 'Unit'}"?`, 'Delete', true).then(ok => {
+        if (ok) {
+          drawings.splice(i, 1);
+          drawScene();
+          updateUnitsList();
+        }
+      });
     };
 
     item.appendChild(dot);
@@ -1078,8 +1166,9 @@ function updateUnitsList() {
     item.appendChild(del);
     item.onclick = ev => {
       if (ev.target === del) return;
-      const n = prompt('Edit unit name:', d.label || 'Unit');
-      if (n !== null && n.trim()) { drawings[i].label = n.trim(); drawScene(); updateUnitsList(); }
+      modalPrompt('Edit Unit', 'Enter unit name:', d.label || 'Unit', 'Unit name...').then(n => {
+        if (n !== null && n.trim()) { drawings[i].label = n.trim(); drawScene(); updateUnitsList(); }
+      });
     };
     list.appendChild(item);
   });
@@ -1141,7 +1230,7 @@ function loadPlan() {
         drawScene();
         updateUnitsList();
       } catch (err) {
-        alert('Error loading plan: ' + err.message);
+        modalAlert('Error Loading Plan', err.message);
       }
     };
     reader.readAsText(e.target.files[0]);
@@ -1151,15 +1240,17 @@ function loadPlan() {
 
 // ─── Clear ────────────────────────────────────────────────────────────────────
 function clearCanvas() {
-  if (confirm('Clear all drawings?')) {
-    drawings = [];
-    currentPoints = [];
-    measurePoints = [];
-    drawingHintShown = false;
-    hideDrawingHint();
-    drawScene();
-    updateUnitsList();
-  }
+  modalConfirm('Clear Board', 'Remove all drawings from the board?', 'Clear', true).then(ok => {
+    if (ok) {
+      drawings = [];
+      currentPoints = [];
+      measurePoints = [];
+      drawingHintShown = false;
+      hideDrawingHint();
+      drawScene();
+      updateUnitsList();
+    }
+  });
 }
 
 // ─── Resize ───────────────────────────────────────────────────────────────────
@@ -1167,7 +1258,7 @@ function resizeCanvas() {
   const wrapper = document.getElementById('canvasWrapper');
   const W = wrapper.clientWidth - 40;
   const H = wrapper.clientHeight - 40;
-  const ratio = 900 / 720;
+  const ratio = 900 / 660;
   if (W / H > ratio) {
     canvas.style.height = H + 'px';
     canvas.style.width = (H * ratio) + 'px';
