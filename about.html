@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About – TacticalDropz</title>
+  <title>About & Help – TacticalDropz</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -18,8 +18,8 @@
 
     <!-- Reuse top-nav styling -->
     <div class="top-nav">
-      <a href="index.html" class="tab">Planner</a>
-      <button class="tab active">About</button>
+      <a href="index.html" class="nav-link">⚔️ Planner</a>
+      <a class="nav-link" style="background:#e94560; border-color:#e94560; color:#fff; cursor:default;">About &amp; Help</a>
     </div>
 
     <!-- Main content area -->
@@ -29,11 +29,11 @@
         <!-- Use toolbar as header container -->
         <div class="toolbar">
           <div class="toolbar-section">
-            <span class="mode-label">About TacticalDropz</span>
+            <span class="mode-label">About &amp; Help — TacticalDropz</span>
           </div>
         </div>
 
-        <div class="canvas-wrapper" style="align-items:flex-start; justify-content:flex-start;">
+        <div class="canvas-wrapper" style="align-items:flex-start; justify-content:flex-start; overflow-y:auto; height:100%;">
           <div style="max-width:900px; padding:30px;">
 
             <section style="margin-bottom:32px;">
@@ -80,26 +80,77 @@
               </p>
             </section>
 
-            <section>
+            <section style="margin-bottom:32px;">
               <h2 style="color:#e94560; margin-bottom:10px;">Feedback</h2>
               <p style="margin-bottom:12px;">
-                If you’ve used TacticalDropz and have thoughts — good or bad — feedback
+                If you've used TacticalDropz and have thoughts — good or bad — feedback
                 is welcome and appreciated.
               </p>
-
-              <a
-                href="mailto:nwimmer123@yahoo.com?subject=TacticalDropz Feedback"
-                class="feedback-link">
+              <a href="/cdn-cgi/l/email-protection#48263f2125252d3a797a7b083129202727662b2725773b3d2a222d2b3c751c292b3c212b29240c3a273832680e2d2d2c2a292b23" class="feedback-link">
                 📧 Send feedback
               </a>
             </section>
 
-          </div>
-        </div>
+            <hr style="border-color:rgba(255,255,255,0.1); margin:40px 0;">
 
-      </div>
-    </div>
+            <section style="margin-bottom:32px;">
+              <h2 style="color:#e94560; margin-bottom:20px;">How to Use</h2>
 
-  </div>
-</body>
-</html>
+              <h3 style="color:#ccc; margin-bottom:8px;">Getting started</h3>
+              <p style="margin-bottom:20px;">Select your terrain format (GW, WTC, or UKTC) and a mission from the left sidebar.
+              The board updates with the correct deployment zones and objectives.
+              Use the layout dropdown in the top nav to cycle through terrain layouts.</p>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">🖊️ Draw Tool</h3>
+              <p style="margin-bottom:6px;">Click to place points and outline a unit on the board.</p>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li><strong>Left click</strong> — add a point</li>
+                <li><strong>Right click</strong> — undo last point</li>
+                <li><strong>Double click</strong> — close and finish the shape</li>
+                <li><strong>Drag</strong> inside a finished shape — move it</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">📏 Measure Tool</h3>
+              <p style="margin-bottom:6px;">Click two points to measure distance in inches.</p>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li><strong>Left click</strong> — set start, then end point</li>
+                <li><strong>Right click</strong> on a line — delete it</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">👁️ Line of Sight Tool</h3>
+              <p style="margin-bottom:6px;">Draw a line of sight check between two points.</p>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li><strong>Left click</strong> — set origin, then target</li>
+                <li><strong>Right click</strong> on a line — delete it</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">🪧 Label Tool</h3>
+              <p style="margin-bottom:6px;">Place a text label anywhere on the board.</p>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li><strong>Left click</strong> — place label (prompts for text)</li>
+                <li><strong>Right click</strong> on a label — delete it</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">🪖 Place Models Tool</h3>
+              <p style="margin-bottom:6px;">Place model bases on the board with live cohesion checking.</p>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li>Select base size and model count in the toolbar first</li>
+                <li><strong>Left click</strong> empty space — drop a group</li>
+                <li><strong>Left click</strong> a base — select it (enters edit mode)</li>
+                <li><strong>Ctrl + click</strong> — add/remove a base from selection</li>
+                <li><strong>Drag</strong> a selected base — move the whole selection</li>
+                <li><strong>Right click</strong> a base in edit mode — remove it</li>
+                <li><strong>Left click</strong> empty space in edit mode — exit edit mode</li>
+                <li>Cohesion lines show <span style="color:#64dc64">green</span> when within 2&quot; or <span style="color:#ff5050">red</span> when out of coherency</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">💾 Save / Load / Clear</h3>
+              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
+                <li><strong>Save Plan</strong> — downloads your board as a JSON file</li>
+                <li><strong>Load Plan</strong> — restores a previously saved board</li>
+                <li><strong>Clear</strong> — resets the board</li>
+              </ul>
+
+              <h3 style="color:#ccc; margin-bottom:8px;">WTC — Hidden Supplies</h3>
+              <p>When WTC terrain and Hammer &amp; Anvil are selected, a <strong>Hidden Supplies</strong>
+              toggle appears in the top nav to switch to the Hidden Supplies variant of that layout.<

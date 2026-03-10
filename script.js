@@ -72,27 +72,23 @@ function showModelsHelp() {
       <ul>
         <li>Select base size and model count in the toolbar</li>
         <li>Switch to <strong>Place Models</strong> tool</li>
-        <li><span class="shortcut">Left click</span> the board to drop the group</li>
-        <li>Models appear in a tight grid, ready to drag</li>
+        <li><span class="shortcut">Click</span> empty space to drop a group</li>
       </ul>
-      <h4>Moving bases</h4>
+      <h4>Selecting &amp; moving</h4>
       <ul>
-        <li><span class="shortcut">Left click</span> a base to select it</li>
-        <li><span class="shortcut">Shift + click</span> to add/remove from selection</li>
-        <li><span class="shortcut">Drag</span> any selected base to move the whole selection</li>
-        <li><span class="shortcut">Click empty space</span> to deselect all</li>
+        <li><span class="shortcut">Click</span> a base to select it (deselects others)</li>
+        <li><span class="shortcut">Ctrl + click</span> to add/remove a base from selection</li>
+        <li><span class="shortcut">Drag</span> a selected base to move the whole selection</li>
+        <li><span class="shortcut">Click empty space</span> to deselect and exit edit mode</li>
       </ul>
-      <h4>Editing a formation</h4>
+      <h4>Editing</h4>
       <ul>
-        <li><span class="shortcut">Double-click</span> a locked group to enter edit mode</li>
-        <li><span class="shortcut">Double-click</span> again (or click outside) to lock it</li>
-        <li><span class="shortcut">Right-click</span> a base to remove it from the unit</li>
+        <li><span class="shortcut">Right-click</span> a base (in edit mode) to remove it</li>
       </ul>
       <h4>Cohesion</h4>
       <ul>
-        <li>A ring shows around the group perimeter</li>
-        <li><span style="color:#64dc64">■</span> Green = all bases within 2" cohesion</li>
-        <li><span style="color:#ff5050">■</span> Red = one or more bases out of cohesion</li>
+        <li><span style="color:#64dc64">■</span> Green lines = all bases within 2" cohesion</li>
+        <li><span style="color:#ff5050">■</span> Red lines = one or more bases out of cohesion</li>
       </ul>`,
     buttons: [{ label: 'Got it', style: 'modal-btn-primary', value: true }]
   });
@@ -135,7 +131,6 @@ let modelsSelectedBases = new Set(); // indices into the active modelGroup being
 let modelsEditingIndex  = null;      // drawings[] index of group in edit mode
 let modelsDragStart     = null;      // {x,y} canvas point where drag started
 let modelsDragging      = false;
-let modelsClickAwayTimer = null;
 
 function updateRotationVisibility() {
   const key = document.getElementById('baseSize')?.value || '';
@@ -244,7 +239,7 @@ function drawModelGroup(group, isEditing) {
   if (group.label) {
     const cx = group.bases.reduce((s, b) => s + b.x, 0) / group.bases.length;
     const cy = group.bases.reduce((s, b) => s + b.y, 0) / group.bases.length;
-    const minY = Math.min(...group.bases.map(b => b.y)) - r - 14;
+    const minY = Math.min(...group.bases.map(b => b.y)) - Math.max(rw,rh) - 14;
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -257,10 +252,10 @@ function drawModelGroup(group, isEditing) {
 
   // Edit mode indicator
   if (isEditing) {
-    const minX = Math.min(...group.bases.map(b => b.x)) - r - 6;
-    const minY2 = Math.min(...group.bases.map(b => b.y)) - r - 6;
-    const maxX = Math.max(...group.bases.map(b => b.x)) + r + 6;
-    const maxY2 = Math.max(...group.bases.map(b => b.y)) + r + 6;
+    const minX = Math.min(...group.bases.map(b => b.x)) - Math.max(rw,rh) - 6;
+    const minY2 = Math.min(...group.bases.map(b => b.y)) - Math.max(rw,rh) - 6;
+    const maxX = Math.max(...group.bases.map(b => b.x)) + Math.max(rw,rh) + 6;
+    const maxY2 = Math.max(...group.bases.map(b => b.y)) + Math.max(rw,rh) + 6;
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
@@ -274,48 +269,6 @@ const IPX = 15; // inches to pixels: 1" = 15px
 // Board: 60" x 44" = 900px x 660px
 
 // Sort an array of 4 {x,y} corner points geometrically into [TL, TR, BR, BL]
-function sortCorners(pts) {
-  const sorted = [...pts].sort((a, b) => a.y - b.y);
-  const top    = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
-  const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
-  return [top[0], top[1], bottom[1], bottom[0]]; // TL, TR, BR, BL
-}
-
-// ─── WTC Piece Library ────────────────────────────────────────────────────────
-// All dimensions in inches. Arm lengths derived from official 2025/2026 WTC pack.
-// Footprint: 12"x6". Internal ruin: 9"x5". Wall thickness: 1.3" (33mm lower floor).
-// VERIFY: armLong, armShort, wallThickness against physical pieces if rendering looks off.
-const WTC_PIECES = {
-  wtc_three_storey: {
-    label: '3-Storey Ruin',
-    armLong: 9,          // inches along long edge  — VERIFY
-    armShort: 5,         // inches along short edge — VERIFY
-    wallThickness: 1.3,  // inches (33mm)           — VERIFY
-    fillColor: 'rgba(60,80,100,0.75)',
-    strokeColor: 'rgba(120,160,200,0.9)',
-    wallColor: 'rgba(80,110,140,0.95)'
-  },
-  wtc_two_storey: {
-    label: '2-Storey Ruin',
-    armLong: 9,
-    armShort: 5,
-    wallThickness: 1.3,
-    fillColor: 'rgba(60,80,100,0.6)',
-    strokeColor: 'rgba(120,160,200,0.75)',
-    wallColor: 'rgba(80,110,140,0.85)'
-  },
-  wtc_container: {
-    label: 'Container',
-    fillColor: 'rgba(80,100,60,0.75)',
-    strokeColor: 'rgba(140,180,100,0.9)'
-  },
-  wtc_prototype: {
-    label: 'Prototype Ruin',
-    fillColor: 'rgba(100,80,60,0.6)',
-    strokeColor: 'rgba(180,140,100,0.75)'
-  }
-};
-
 // ─── State ────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('battlefield');
 const ctx = canvas.getContext('2d');
@@ -327,15 +280,10 @@ let currentTerrainFormat = 'gw'; // 'gw' | 'wtc' | 'uktc'
 let currentLayoutIndex = 0;
 
 let deployments = [];
-let gwLayouts = 8; // GW uses image-based layouts l1-l8
-let wtcData = null;
-let uktcData = null;
-let currentWtcLayout = null;
 
 let drawings = [];
 let currentPoints = [];
 let measurePoints = [];
-let isDrawing = false;
 let drawingHintShown = false;
 let hintElement = null;
 
@@ -347,11 +295,49 @@ let dragOffset = { x: 0, y: 0 };
 const terrainImages = [];
 let gwImagesLoaded = 0;
 
+// WTC terrain image (loaded on demand)
+let wtcImage    = null;
+let wtcImageSrc = null;
+let hiddenSupplies = false;
+
+function loadWtcImage() {
+  if (currentTerrainFormat !== 'wtc' || !currentMission) { wtcImage = null; drawScene(); return; }
+  const missionId = currentMission.id;
+  const layout    = currentLayoutIndex + 1;
+  const suffix    = hiddenSupplies ? 'HS' : '';
+  const src       = `layouts/wtc/${missionId}/${layout}${suffix}.png`;
+  if (src === wtcImageSrc && wtcImage) { drawScene(); return; }
+  wtcImageSrc = src;
+  wtcImage    = null;
+  const img   = new Image();
+  img.onload  = () => { wtcImage = img; drawScene(); };
+  img.onerror = () => {
+    if (hiddenSupplies) {
+      const fbSrc = `layouts/wtc/${missionId}/${layout}.png`;
+      const fb = new Image();
+      fb.onload  = () => { wtcImage = fb; wtcImageSrc = fbSrc; drawScene(); };
+      fb.onerror = () => { wtcImage = null; drawScene(); };
+      fb.src = fbSrc;
+    } else { wtcImage = null; drawScene(); }
+  };
+  img.src = src;
+}
+
+function updateHsToggleVisibility() {
+  const hsWrapper = document.getElementById('hsToggleWrapper');
+  if (!hsWrapper) return;
+  const show = currentTerrainFormat === 'wtc' && currentMission?.id === 'hammerAnvil';
+  hsWrapper.style.display = show ? 'flex' : 'none';
+  if (!show) {
+    hiddenSupplies = false;
+    const cb = document.getElementById('hiddenSuppliesToggle');
+    if (cb) cb.checked = false;
+  }
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function init() {
   await loadDeployments();
-  await loadWtcTerrain();
-  await loadUktcTerrain();
   loadGwImages();
   buildNav();
   buildMissionSidebar();
@@ -439,36 +425,6 @@ const FALLBACK_DEPLOYMENTS = [
   }
 ];
 
-async function loadWtcTerrain() {
-  try {
-    const res = await fetch('data/terrain/wtc-terrain.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    wtcData = await res.json();
-    console.log(`Loaded WTC terrain: ${Object.keys(wtcData.missions || {}).length} missions`);
-  } catch (e) {
-    console.warn('Could not load wtc-terrain.json', e);
-    wtcData = { format: 'wtc', name: 'WTC', missions: {
-      hammerAnvil:   { name: 'Hammer and Anvil',    layouts: [{ id: 'ha_1', name: 'Layout 1', pieces: [] }] },
-      tippingPoint:  { name: 'Tipping Point',        layouts: [{ id: 'tp_1', name: 'Layout 1', pieces: [] }] },
-      searchDestroy: { name: 'Search and Destroy',   layouts: [{ id: 'sd_1', name: 'Layout 1', pieces: [] }] },
-      crucibleBattle:{ name: 'Crucible of Battle',   layouts: [{ id: 'cb_1', name: 'Layout 1', pieces: [] }] },
-      sweepingEngage:{ name: 'Sweeping Engagement',  layouts: [{ id: 'se_1', name: 'Layout 1', pieces: [] }] },
-      dawnWar:       { name: 'Dawn of War',          layouts: [{ id: 'dw_1', name: 'Layout 1', pieces: [] }] }
-    }};
-  }
-}
-
-async function loadUktcTerrain() {
-  try {
-    const res = await fetch('data/terrain/uktc-terrain.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    uktcData = await res.json();
-  } catch (e) {
-    console.warn('Could not load uktc-terrain.json', e);
-    uktcData = { format: 'uktc', name: 'UKTC', layouts: [{ id: 'placeholder', name: 'No layouts loaded', pieces: [] }] };
-  }
-}
-
 function loadGwImages() {
   for (let i = 1; i <= 8; i++) {
     const img = new Image();
@@ -532,11 +488,26 @@ function buildNav() {
 
   populateLayoutDropdown();
 
+  // Hidden Supplies toggle (WTC + Hammer & Anvil only)
+  const hsWrapper = document.createElement('label');
+  hsWrapper.id = 'hsToggleWrapper';
+  hsWrapper.style.cssText = 'display:none; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#aaa; white-space:nowrap;';
+  const hsCb = document.createElement('input');
+  hsCb.type = 'checkbox';
+  hsCb.id   = 'hiddenSuppliesToggle';
+  hsCb.style.cssText = 'width:15px; height:15px; cursor:pointer; accent-color:#e94560;';
+  hsCb.onchange = () => { hiddenSupplies = hsCb.checked; loadWtcImage(); };
+  const hsLbl = document.createElement('span');
+  hsLbl.textContent = 'Hidden Supplies';
+  hsWrapper.appendChild(hsCb);
+  hsWrapper.appendChild(hsLbl);
+  nav.appendChild(hsWrapper);
+
   // About link
   const about = document.createElement('a');
   about.href = 'about.html';
   about.className = 'nav-link';
-  about.textContent = 'About';
+  about.textContent = 'About/Help';
   nav.appendChild(about);
 
   // Feedback link
@@ -547,58 +518,15 @@ function buildNav() {
   nav.appendChild(feedback);
 }
 
-function getWtcMissionLayouts() {
-  if (!wtcData || !wtcData.missions) {
-    console.warn('getWtcMissionLayouts: wtcData or wtcData.missions missing', wtcData);
-    return null;
-  }
-  const missionId = currentMission ? currentMission.id : null;
-  if (!missionId) {
-    console.warn('getWtcMissionLayouts: currentMission is null');
-    return null;
-  }
-  const missionData = wtcData.missions[missionId];
-  if (!missionData) {
-    console.warn(`getWtcMissionLayouts: no mission data for id "${missionId}". Available keys:`, Object.keys(wtcData.missions));
-  }
-  return missionData ? missionData.layouts : null;
-}
-
 function populateLayoutDropdown() {
   const sel = document.getElementById('layoutSelect');
   sel.innerHTML = '';
-
-  if (currentTerrainFormat === 'gw') {
-    for (let i = 1; i <= 8; i++) {
-      const o = document.createElement('option');
-      o.value = i - 1;
-      o.textContent = `Layout ${i}`;
-      sel.appendChild(o);
-    }
-  } else if (currentTerrainFormat === 'wtc' && wtcData) {
-    const layouts = getWtcMissionLayouts();
-    if (layouts && layouts.length) {
-      layouts.forEach((layout, i) => {
-        const o = document.createElement('option');
-        o.value = i;
-        o.textContent = layout.name;
-        sel.appendChild(o);
-      });
-    } else {
-      const o = document.createElement('option');
-      o.value = 0;
-      o.textContent = 'No WTC layouts for this mission';
-      sel.appendChild(o);
-    }
-  } else if (currentTerrainFormat === 'uktc' && uktcData) {
-    uktcData.layouts.forEach((layout, i) => {
-      const o = document.createElement('option');
-      o.value = i;
-      o.textContent = layout.name;
-      sel.appendChild(o);
-    });
+  for (let i = 1; i <= 8; i++) {
+    const o = document.createElement('option');
+    o.value = i - 1;
+    o.textContent = `Layout ${i}`;
+    sel.appendChild(o);
   }
-
   currentLayoutIndex = 0;
   sel.value = 0;
 }
@@ -638,13 +566,17 @@ function bindCanvas() {
 function selectTerrainFormat(format) {
   currentTerrainFormat = format;
   currentLayoutIndex = 0;
+  if (format !== 'wtc') { wtcImage = null; wtcImageSrc = null; }
   populateLayoutDropdown();
-  drawScene();
+  updateHsToggleVisibility();
+  if (format === 'wtc') loadWtcImage();
+  else drawScene();
 }
 
 function selectLayout(index) {
   currentLayoutIndex = index;
-  drawScene();
+  if (currentTerrainFormat === 'wtc') loadWtcImage();
+  else drawScene();
 }
 
 function selectMission(id) {
@@ -652,9 +584,9 @@ function selectMission(id) {
   document.querySelectorAll('.deploy-option').forEach(o => {
     o.classList.toggle('active', o.dataset.id === id);
   });
-  // WTC terrain is mission-specific — repopulate layout dropdown
-  if (currentTerrainFormat === 'wtc') populateLayoutDropdown();
-  drawScene();
+  updateHsToggleVisibility();
+  if (currentTerrainFormat === 'wtc') { populateLayoutDropdown(); loadWtcImage(); }
+  else drawScene();
 }
 
 function selectTool(tool) {
@@ -676,7 +608,7 @@ function selectTool(tool) {
   if (btn) btn.classList.add('active');
   // Show hint for models tool
   if (tool === 'models') {
-    showDrawingHint('🪖 Double-click to place models · Click base to select · Drag to move · Double-click group to lock/unlock');
+    showDrawingHint('🪖 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
   }
   drawScene();
 }
@@ -690,239 +622,12 @@ function selectColor(color) {
 
 // ─── Coordinate Helpers ───────────────────────────────────────────────────────
 function i2p(inches) { return inches * IPX; }
-function p2i(px) { return px / IPX; }
 
 // Convert an array of [x,y] inch pairs to pixel {x,y} objects
 function inchPointsToPx(pts) {
   return pts.map(([x, y]) => ({ x: i2p(x), y: i2p(y) }));
 }
 
-// ─── WTC L-Shape Geometry ─────────────────────────────────────────────────────
-// Given four corners (in pixels, clockwise from TL) and a facing compass point,
-// returns the 6 polygon points (in pixels) of the L-shape wall footprint.
-// The facing indicates which corner of the bounding rect the solid L corner sits in.
-//
-// corners: [TL, TR, BR, BL] as {x,y} pixel objects (after any rotation, but since
-// we store actual grid coords, they come in as axis-aligned for now)
-//
-// We treat corners[0]=TL, [1]=TR, [2]=BR, [3]=BL.
-// facing NW → solid corner at TL (corners[0])
-// facing NE → solid corner at TR (corners[1])
-// facing SE → solid corner at BR (corners[2])
-// facing SW → solid corner at BL (corners[3])
-
-function buildLPolygon(corners, facing, pieceType) {
-  const lib = WTC_PIECES[pieceType];
-  if (!lib || !lib.armLong) return null;
-
-  // corners in order: provide as [[x,y],...] in inches, we get px here
-  const [TL, TR, BR, BL] = sortCorners(corners);
-
-  // Edge vectors
-  const topLen    = dist(TL, TR);
-  const leftLen   = dist(TL, BL);
-
-  const t = lib.wallThickness * IPX; // wall thickness in px
-  const aL = lib.armLong * IPX;      // arm along long edge
-  const aS = lib.armShort * IPX;     // arm along short edge
-
-  // Unit vectors along each edge from the solid corner
-  function unitVec(from, to) {
-    const d = dist(from, to);
-    return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
-  }
-
-  function addVec(pt, vec, len) {
-    return { x: pt.x + vec.x * len, y: pt.y + vec.y * len };
-  }
-
-  // Determine which corner is solid and the two edges emanating from it
-  // longEdge goes along the longer dimension, shortEdge along the shorter
-  let solidCorner, longNeighbor, shortNeighbor;
-
-  const isWide = topLen >= leftLen; // true if top edge is the long edge
-
-  switch (facing) {
-    case 'NW':
-      solidCorner  = TL;
-      longNeighbor  = isWide ? TR : BL;
-      shortNeighbor = isWide ? BL : TR;
-      break;
-    case 'NE':
-      solidCorner  = TR;
-      longNeighbor  = isWide ? TL : BR;
-      shortNeighbor = isWide ? BR : TL;
-      break;
-    case 'SE':
-      solidCorner  = BR;
-      longNeighbor  = isWide ? BL : TR;
-      shortNeighbor = isWide ? TR : BL;
-      break;
-    case 'SW':
-      solidCorner  = BL;
-      longNeighbor  = isWide ? BR : TL;
-      shortNeighbor = isWide ? TL : BR;
-      break;
-    default:
-      return null;
-  }
-
-  const uvLong  = unitVec(solidCorner, longNeighbor);
-  const uvShort = unitVec(solidCorner, shortNeighbor);
-
-  // 6 points of the L (clockwise from solid corner):
-  // P0: solidCorner
-  // P1: along long arm, full length
-  // P2: inward by wall thickness
-  // P3: back toward solid corner along inner long edge, to where short arm ends
-  // P4: inward along short arm at inner depth
-  // P5: along short arm, full length from solid corner
-
-  const P0 = solidCorner;
-  const P1 = addVec(P0, uvLong, aL);
-  const P2 = addVec(P1, uvShort, t);
-  const P3 = addVec(P0, uvLong, t); // move along long by wall thickness to find inner corner junction
-  const P4 = addVec(P3, uvShort, aS - t); // this completes the inner corner
-  const P5 = addVec(P0, uvShort, aS);
-
-  // Hmm — let me use a cleaner formulation:
-  // The L shape has an outer path along two arms and an inner concave corner.
-  // Outer: solidCorner -> end of long arm -> (turn inward t) -> inner long -> inner corner -> inner short -> end of short arm -> solidCorner
-
-  const outerLongEnd   = addVec(P0, uvLong,  aL);
-  const outerShortEnd  = addVec(P0, uvShort, aS);
-  const innerLongEnd   = addVec(outerLongEnd,  uvShort, t);
-  const innerShortEnd  = addVec(outerShortEnd, uvLong,  t);
-  const innerCorner    = addVec(P0, uvLong, t);
-  const innerCornerFull = addVec(innerCorner, uvShort, t);
-
-  return [P0, outerLongEnd, innerLongEnd, innerShortEnd, outerShortEnd];
-  // Note: this gives a 5-point L (no inner corner detail needed for top-down view)
-  // For a cleaner L with visible inner corner:
-}
-
-// Cleaner L polygon — 6 points
-function buildLPolygonClean(cornersPx, facing, pieceType) {
-  const lib = WTC_PIECES[pieceType];
-  if (!lib || !lib.armLong) return null;
-
-  // Trust corner order from JSON: [TL, TR, BR, BL]
-  const [TL, TR, BR, BL] = cornersPx;
-
-  const topLen  = dist(TL, TR);
-  const leftLen = dist(TL, BL);
-  const isWide  = topLen >= leftLen;
-
-  const t  = lib.wallThickness * IPX;
-  const aL = lib.armLong  * IPX;
-  const aS = lib.armShort * IPX;
-
-  function uv(from, to) {
-    const d = dist(from, to);
-    return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
-  }
-  function av(pt, vec, len) {
-    return { x: pt.x + vec.x * len, y: pt.y + vec.y * len };
-  }
-
-  // For each compass corner, identify the two adjacent neighbors.
-  // longN = whichever neighbor is further away (the 12" arm direction)
-  // shortN = whichever neighbor is closer (the 6" arm direction)
-  function pickLongShort(corner, n1, n2) {
-    return dist(corner, n1) >= dist(corner, n2)
-      ? { longN: n1, shortN: n2 }
-      : { longN: n2, shortN: n1 };
-  }
-
-  let C, longN, shortN;
-  switch (facing) {
-    case 'NW': { C = TL; const r = pickLongShort(TL, TR, BL); longN = r.longN; shortN = r.shortN; break; }
-    case 'NE': { C = TR; const r = pickLongShort(TR, TL, BR); longN = r.longN; shortN = r.shortN; break; }
-    case 'SE': { C = BR; const r = pickLongShort(BR, BL, TR); longN = r.longN; shortN = r.shortN; break; }
-    case 'SW': { C = BL; const r = pickLongShort(BL, BR, TL); longN = r.longN; shortN = r.shortN; break; }
-    default: return null;
-  }
-
-  const uvL = uv(C, longN);
-  const uvS = uv(C, shortN);
-
-  // Shift the entire L 22mm inward from its two outer facing edges.
-  // The solid corner moves inward along both arm directions by 22mm.
-  // L dimensions (armLong, armShort, wallThickness) are unchanged.
-  const inset = (22 / 25.4) * IPX;
-  const C_ = av(av(C, uvL, inset), uvS, inset);
-
-  // 6 points of L — same shape, just shifted from C_:
-  const p0 = C_;                           // solid corner (shifted inward)
-  const p1 = av(C_,  uvL, aL);            // end of long arm (outer)
-  const p2 = av(p1,  uvS, t);             // end of long arm (inner)
-  const p3 = av(av(C_, uvL, t), uvS, t);  // inner corner junction
-  const p4 = av(av(C_, uvS, aS), uvL, t); // end of short arm (inner)
-  const p5 = av(C_,  uvS, aS);            // end of short arm (outer)
-
-  return [p0, p1, p2, p3, p4, p5];
-}
-
-function dist(a, b) {
-  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-}
-
-// Convert piece corners from inches to px {x,y} objects
-// corners stored as [[x,y],[x,y],[x,y],[x,y]] clockwise from TL
-function cornersToPx(corners) {
-  return corners.map(([x, y]) => ({ x: i2p(x), y: i2p(y) }));
-}
-
-// ─── LOS Intersection ─────────────────────────────────────────────────────────
-// Test if segment (p1->p2) intersects segment (p3->p4), return t param or null
-function segmentIntersect(p1, p2, p3, p4) {
-  const d1 = { x: p2.x - p1.x, y: p2.y - p1.y };
-  const d2 = { x: p4.x - p3.x, y: p4.y - p3.y };
-  const cross = d1.x * d2.y - d1.y * d2.x;
-  if (Math.abs(cross) < 1e-10) return null; // parallel
-  const t = ((p3.x - p1.x) * d2.y - (p3.y - p1.y) * d2.x) / cross;
-  const u = ((p3.x - p1.x) * d1.y - (p3.y - p1.y) * d1.x) / cross;
-  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return t;
-  return null;
-}
-
-// Given a LOS ray from start to end, find the nearest intersection with all
-// WTC terrain piece bounding rectangles. Returns the clipped endpoint.
-function clipLosToTerrain(start, end) {
-  if (currentTerrainFormat !== 'wtc') return end;
-
-  const layoutData = getWtcLayoutData();
-  if (!layoutData || !layoutData.pieces.length) return end;
-
-  let minT = 1;
-
-  layoutData.pieces.forEach(piece => {
-    const corners = cornersToPx(piece.corners);
-    // Bounding rect edges: TL-TR, TR-BR, BR-BL, BL-TL
-    const edges = [
-      [corners[0], corners[1]],
-      [corners[1], corners[2]],
-      [corners[2], corners[3]],
-      [corners[3], corners[0]]
-    ];
-    edges.forEach(([a, b]) => {
-      const t = segmentIntersect(start, end, a, b);
-      if (t !== null && t > 0.001 && t < minT) minT = t;
-    });
-  });
-
-  return {
-    x: start.x + (end.x - start.x) * minT,
-    y: start.y + (end.y - start.y) * minT
-  };
-}
-
-function getWtcLayoutData() {
-  if (!wtcData) return null;
-  const layouts = getWtcMissionLayouts();
-  if (!layouts) return null;
-  return layouts[currentLayoutIndex] || null;
-}
 
 // ─── Draw Scene ───────────────────────────────────────────────────────────────
 function drawScene() {
@@ -932,7 +637,6 @@ function drawScene() {
   drawGrid();
   drawDeploymentZones();
   drawObjectives();
-  drawTerrain();
   drawUserDrawings();
   drawInProgressPoints();
 }
@@ -945,7 +649,11 @@ function drawBackground() {
       return;
     }
   }
-  // Blank board for WTC / UKTC / GW image not loaded
+  if (currentTerrainFormat === 'wtc' && wtcImage) {
+    ctx.drawImage(wtcImage, 0, 0, canvas.width, canvas.height);
+    return;
+  }
+  // Blank board
   ctx.fillStyle = '#1a2030';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
@@ -974,9 +682,18 @@ function drawGrid() {
 function drawDeploymentZones() {
   if (!currentMission) return;
   currentMission.zones.forEach(zone => {
-    const pts = inchPointsToPx(zone.points);
     ctx.beginPath();
-    pts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+    zone.points.forEach((pt, i) => {
+      if (pt.arc) {
+        const cx = i2p(pt.cx), cy = i2p(pt.cy), r = i2p(pt.r);
+        const start = pt.startAngle * Math.PI / 180;
+        const end   = pt.endAngle   * Math.PI / 180;
+        ctx.arc(cx, cy, r, start, end, pt.ccw || false);
+      } else {
+        const x = i2p(pt[0]), y = i2p(pt[1]);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+    });
     ctx.closePath();
     ctx.fillStyle = zone.color;
     ctx.fill();
@@ -988,6 +705,7 @@ function drawDeploymentZones() {
 
 function drawObjectives() {
   if (!currentMission) return;
+  if (currentTerrainFormat === 'wtc' && wtcImage) return;
   // 40mm base = 1.57" radius. Zone extends 3" from base edge = 4.57" total radius.
   const zoneR  = i2p(40 / 25.4 / 2 + 3); // ~4.57"
   const baseR  = i2p(40 / 25.4 / 2);      // ~0.79" (40mm model base)
@@ -1024,65 +742,6 @@ function drawObjectives() {
   });
 }
 
-function drawTerrain() {
-  if (currentTerrainFormat === 'gw') return; // GW uses background image
-
-  let layoutData = null;
-  if (currentTerrainFormat === 'wtc') layoutData = getWtcLayoutData();
-  else if (currentTerrainFormat === 'uktc' && uktcData) {
-    layoutData = uktcData.layouts[currentLayoutIndex] || null;
-  }
-  if (!layoutData || !layoutData.pieces.length) return;
-
-  layoutData.pieces.forEach(piece => drawTerrainPiece(piece));
-}
-
-function drawTerrainPiece(piece) {
-  const lib = WTC_PIECES[piece.shape];
-  if (!lib) return;
-
-  const cornersPx = cornersToPx(piece.corners);
-  const [TL, TR, BR, BL] = cornersPx;
-
-  // Draw bounding rectangle (terrain footprint — used for LOS)
-  ctx.beginPath();
-  ctx.moveTo(TL.x, TL.y);
-  ctx.lineTo(TR.x, TR.y);
-  ctx.lineTo(BR.x, BR.y);
-  ctx.lineTo(BL.x, BL.y);
-  ctx.closePath();
-  ctx.fillStyle = lib.fillColor;
-  ctx.fill();
-  ctx.strokeStyle = lib.strokeColor;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Draw L-shape overlay for ruin types
-  if (piece.facing && lib.wallColor) {
-    const lPts = buildLPolygonClean(cornersPx, piece.facing, piece.shape);
-    if (lPts) {
-      ctx.beginPath();
-      lPts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
-      ctx.closePath();
-      ctx.fillStyle = lib.wallColor;
-      ctx.fill();
-      ctx.strokeStyle = lib.strokeColor;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  }
-
-  // Label
-  if (lib.label) {
-    const cx = (TL.x + TR.x + BR.x + BL.x) / 4;
-    const cy = (TL.y + TR.y + BR.y + BL.y) / 4;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${lib.label} [${piece.id}]`, cx, cy);
-  }
-}
 
 function drawUserDrawings() {
   drawings.forEach((drawing, i) => {
@@ -1221,10 +880,48 @@ function isPointInUnit(x, y, unit) {
   return inside;
 }
 
+function clipLosToTerrain(start, end) { return end; }
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq > 0 ? ((px - ax) * dx + (py - ay) * dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
 function handleMouseDown(e) {
   const { x, y } = getCanvasPoint(e);
 
+  // Right-click on measure/sight/label: delete it
+  if (e.button === 2 && (currentTool === 'measure' || currentTool === 'sight' || currentTool === 'label')) {
+    for (let i = drawings.length - 1; i >= 0; i--) {
+      const d = drawings[i];
+      let hit = false;
+      if ((d.type === 'measure' || d.type === 'sight') && d.start && d.end) {
+        hit = distToSegment(x, y, d.start.x, d.start.y, d.end.x, d.end.y) < 10;
+      } else if (d.type === 'label') {
+        hit = Math.hypot(x - d.x, y - d.y) < 20;
+      }
+      if (hit) {
+        drawings.splice(i, 1);
+        measurePoints = [];
+        drawScene();
+        return;
+      }
+    }
+    return;
+  }
+
   if (currentTool === 'draw') {
+    // Right-click: remove last in-progress point, or cancel if none
+    if (e.button === 2) {
+      if (currentPoints.length > 0) {
+        currentPoints.pop();
+        drawScene();
+      }
+      return;
+    }
     for (let i = drawings.length - 1; i >= 0; i--) {
       if (drawings[i].type === 'unit' && isPointInUnit(x, y, drawings[i])) {
         selectedUnit = i;
@@ -1277,11 +974,12 @@ function handleMouseDown(e) {
 }
 
 function handleModelsMouseDown(e, x, y) {
+
   // Right-click in edit mode: remove base
   if (e.button === 2 && modelsEditingIndex !== null) {
     const group = drawings[modelsEditingIndex];
     const bi = getBaseAtPoint(group, x, y);
-    if (bi >= 0) {
+      if (bi >= 0) {
       group.bases.splice(bi, 1);
       modelsSelectedBases.clear();
       if (group.bases.length === 0) {
@@ -1295,50 +993,41 @@ function handleModelsMouseDown(e, x, y) {
   }
   if (e.button !== 0) return;
 
-  // Check if clicking on an existing group
+  // Check if clicking on any modelGroup base
   for (let gi = drawings.length - 1; gi >= 0; gi--) {
     const d = drawings[gi];
     if (d.type !== 'modelGroup') continue;
     const bi = getBaseAtPoint(d, x, y);
-    if (bi >= 0) {
-      if (modelsEditingIndex === gi) {
-        // Already editing — select/deselect base
-        if (e.shiftKey) {
-          if (modelsSelectedBases.has(bi)) modelsSelectedBases.delete(bi);
-          else modelsSelectedBases.add(bi);
-          modelsDragStart = null; // shift-click never starts drag
-        } else if (modelsSelectedBases.has(bi)) {
-          // Clicking an already-selected base — allow drag
-          modelsDragStart = { x, y };
-          modelsDragging  = false;
-        } else {
-          // Clicking an unselected base — just select, no drag yet
-          modelsSelectedBases.clear();
-          modelsSelectedBases.add(bi);
-          modelsDragStart = null;
-        }
+      if (bi >= 0) {
+      if (modelsEditingIndex !== gi) {
+              modelsEditingIndex = gi;
+        modelsSelectedBases = new Set([bi]);
+        modelsDragStart = null;
+      } else if (e.ctrlKey || e.metaKey) {
+              if (modelsSelectedBases.has(bi)) modelsSelectedBases.delete(bi);
+        else modelsSelectedBases.add(bi);
+        modelsDragStart = null;
+      } else if (modelsSelectedBases.has(bi)) {
+              modelsDragStart = { x, y };
+        modelsDragging  = false;
       } else {
-        // Click on a different group — enter edit mode, select base, no drag yet
-        modelsEditingIndex = gi;
-        modelsSelectedBases.clear();
-        modelsSelectedBases.add(bi);
+              modelsSelectedBases = new Set([bi]);
         modelsDragStart = null;
       }
-      if (modelsClickAwayTimer) { clearTimeout(modelsClickAwayTimer); modelsClickAwayTimer = null; }
       drawScene();
       return;
     }
   }
 
-  // Clicked empty space — deselect after short delay so double-click can cancel it
-  if (modelsClickAwayTimer) clearTimeout(modelsClickAwayTimer);
-  modelsClickAwayTimer = setTimeout(() => {
-    modelsClickAwayTimer = null;
-    modelsEditingIndex = null;
+  // Clicked empty space
+  if (modelsEditingIndex !== null) {
+      modelsEditingIndex = null;
     modelsSelectedBases.clear();
     drawScene();
     updateUnitsList();
-  }, 220);
+  } else {
+      placeModelGroup(x, y);
+  }
 }
 
 function placeModelGroup(x, y) {
@@ -1346,7 +1035,6 @@ function placeModelGroup(x, y) {
   const sz      = getBaseSize(sizeKey);
   const rot     = parseInt(document.getElementById('baseRotation')?.value || '0');
   const count   = parseInt(document.getElementById('modelCount').value) || 1;
-  // If rotated 90°, swap w/h for grid layout
   const wPx = mmToPx(rot === 90 ? sz.h : sz.w);
   const hPx = mmToPx(rot === 90 ? sz.w : sz.h);
   const bases  = buildModelGrid(x, y, count, wPx, hPx);
@@ -1423,33 +1111,6 @@ function handleDoubleClick(e) {
     drawScene();
     updateUnitsList();
   }
-
-  if (currentTool === 'models') {
-    const { x, y } = getCanvasPoint(e);
-    // Check if double-clicking on an existing group
-    for (let gi = drawings.length - 1; gi >= 0; gi--) {
-      const d = drawings[gi];
-      if (d.type !== 'modelGroup') continue;
-      const bi = getBaseAtPoint(d, x, y);
-      if (bi >= 0) {
-        if (modelsEditingIndex === gi) {
-          // Already editing — lock (exit edit mode)
-          modelsEditingIndex = null;
-          modelsSelectedBases.clear();
-        } else {
-          // Enter edit mode, select clicked base
-          modelsEditingIndex = gi;
-          modelsSelectedBases.clear();
-          modelsSelectedBases.add(bi);
-        }
-        drawScene();
-        return;
-      }
-    }
-    // Double-clicked empty space — place new group (cancel any pending click-away)
-    if (modelsClickAwayTimer) { clearTimeout(modelsClickAwayTimer); modelsClickAwayTimer = null; }
-    placeModelGroup(x, y);
-  }
 }
 
 function handleMouseUp() {
@@ -1468,10 +1129,11 @@ function handleMouseUp() {
 // ─── Units List ───────────────────────────────────────────────────────────────
 function updateUnitsList() {
   const list = document.getElementById('unitsList');
+  if (!list) { console.error('[Units] unitsList element not found!'); return; }
   list.innerHTML = '';
   drawings.forEach((d, i) => {
     if (d.type !== 'unit' && d.type !== 'modelGroup') return;
-    const item = document.createElement('div');
+      const item = document.createElement('div');
     item.className = 'unit-item';
 
     const dot = document.createElement('div');
@@ -1479,7 +1141,7 @@ function updateUnitsList() {
     dot.style.backgroundColor = d.color;
 
     const lbl = document.createElement('span');
-    const suffix = d.type === 'modelGroup' ? ` (${d.bases.length}×${d.baseSizeMm}mm)` : '';
+    const suffix = d.type === 'modelGroup' ? ` (${d.bases.length}×${d.baseSizeKey || (d.baseSizeMm + 'mm')})` : '';
     lbl.textContent = (d.label || 'Unit') + suffix;
     lbl.style.flex = '1';
     lbl.style.fontSize = '12px';
@@ -1531,7 +1193,7 @@ function hideDrawingHint() {
 function updateHintForTool() {
   hideDrawingHint();
   if (currentTool === 'models') {
-    showDrawingHint('🪖 Click to place models — Click to select · Shift+click multi-select · Double-click group to edit/lock');
+    showDrawingHint('🪖 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
   }
 }
 
