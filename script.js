@@ -1,18 +1,15 @@
 // ─── Modal System ─────────────────────────────────────────────────────────────
-// Replaces browser prompt/confirm/alert with styled in-app modals.
-// All functions return Promises so callers can await them.
-
 function showModal({ title, body, input, inputValue, inputPlaceholder, buttons }) {
   return new Promise(resolve => {
-    const overlay  = document.getElementById('modalOverlay');
-    const titleEl  = document.getElementById('modalTitle');
-    const bodyEl   = document.getElementById('modalBody');
-    const inputEl  = document.getElementById('modalInput');
-    const actionsEl= document.getElementById('modalActions');
+    const overlay   = document.getElementById('modalOverlay');
+    const titleEl   = document.getElementById('modalTitle');
+    const bodyEl    = document.getElementById('modalBody');
+    const inputEl   = document.getElementById('modalInput');
+    const actionsEl = document.getElementById('modalActions');
 
-    titleEl.textContent  = title || '';
-    bodyEl.textContent   = body  || '';
-    actionsEl.innerHTML  = '';
+    titleEl.innerHTML  = title || '';
+    bodyEl.innerHTML   = body  || '';
+    actionsEl.innerHTML = '';
 
     if (input) {
       inputEl.style.display = 'block';
@@ -34,19 +31,12 @@ function showModal({ title, body, input, inputValue, inputPlaceholder, buttons }
       actionsEl.appendChild(el);
     });
 
-    // Enter key submits primary button
     inputEl.onkeydown = e => {
       if (e.key === 'Enter') {
         const primary = buttons.find(b => b.style === 'modal-btn-primary');
-        if (primary) {
-          overlay.style.display = 'none';
-          resolve(input ? inputEl.value : primary.value);
-        }
+        if (primary) { overlay.style.display = 'none'; resolve(input ? inputEl.value : primary.value); }
       }
-      if (e.key === 'Escape') {
-        overlay.style.display = 'none';
-        resolve(null);
-      }
+      if (e.key === 'Escape') { overlay.style.display = 'none'; resolve(null); }
     };
 
     overlay.style.display = 'flex';
@@ -54,33 +44,229 @@ function showModal({ title, body, input, inputValue, inputPlaceholder, buttons }
 }
 
 function modalConfirm(title, body, confirmLabel = 'Confirm', danger = false) {
-  return showModal({
-    title, body,
-    buttons: [
-      { label: 'Cancel',       style: 'modal-btn-secondary', value: false },
-      { label: confirmLabel,   style: danger ? 'modal-btn-danger' : 'modal-btn-primary', value: true }
-    ]
-  });
+  return showModal({ title, body, buttons: [
+    { label: 'Cancel',      style: 'modal-btn-secondary', value: false },
+    { label: confirmLabel,  style: danger ? 'modal-btn-danger' : 'modal-btn-primary', value: true }
+  ]});
 }
 
 function modalPrompt(title, body, defaultValue = '', placeholder = '') {
-  return showModal({
-    title, body,
-    input: true, inputValue: defaultValue, inputPlaceholder: placeholder,
+  return showModal({ title, body, input: true, inputValue: defaultValue, inputPlaceholder: placeholder,
     buttons: [
       { label: 'Cancel', style: 'modal-btn-secondary', value: null },
       { label: 'OK',     style: 'modal-btn-primary' }
-    ]
-  });
+    ]});
 }
 
 function modalAlert(title, body) {
-  return showModal({
-    title, body,
-    buttons: [
-      { label: 'OK', style: 'modal-btn-primary', value: true }
-    ]
+  return showModal({ title, body, buttons: [
+    { label: 'OK', style: 'modal-btn-primary', value: true }
+  ]});
+}
+
+function showModelsHelp() {
+  showModal({
+    title: '🪖 Place Models — How to Use',
+    body: `
+      <h4>Placing a group</h4>
+      <ul>
+        <li>Select base size and model count in the toolbar</li>
+        <li>Switch to <strong>Place Models</strong> tool</li>
+        <li><span class="shortcut">Left click</span> the board to drop the group</li>
+        <li>Models appear in a tight grid, ready to drag</li>
+      </ul>
+      <h4>Moving bases</h4>
+      <ul>
+        <li><span class="shortcut">Left click</span> a base to select it</li>
+        <li><span class="shortcut">Shift + click</span> to add/remove from selection</li>
+        <li><span class="shortcut">Drag</span> any selected base to move the whole selection</li>
+        <li><span class="shortcut">Click empty space</span> to deselect all</li>
+      </ul>
+      <h4>Editing a formation</h4>
+      <ul>
+        <li><span class="shortcut">Double-click</span> a locked group to enter edit mode</li>
+        <li><span class="shortcut">Double-click</span> again (or click outside) to lock it</li>
+        <li><span class="shortcut">Right-click</span> a base to remove it from the unit</li>
+      </ul>
+      <h4>Cohesion</h4>
+      <ul>
+        <li>A ring shows around the group perimeter</li>
+        <li><span style="color:#64dc64">■</span> Green = all bases within 2" cohesion</li>
+        <li><span style="color:#ff5050">■</span> Red = one or more bases out of cohesion</li>
+      </ul>`,
+    buttons: [{ label: 'Got it', style: 'modal-btn-primary', value: true }]
   });
+}
+
+// ─── Place Models State ───────────────────────────────────────────────────────
+// Base sizes in inches (diameter)
+// Each entry: { w, h } in mm. Ovals have w != h.
+const BASE_SIZES = [
+  { key:'25',     w:25,  h:25  },
+  { key:'28',     w:28,  h:28  },
+  { key:'32',     w:32,  h:32  },
+  { key:'40',     w:40,  h:40  },
+  { key:'50',     w:50,  h:50  },
+  { key:'60',     w:60,  h:60  },
+  { key:'60x35',  w:60,  h:35  },
+  { key:'70',     w:70,  h:70  },
+  { key:'75x42',  w:75,  h:42  },
+  { key:'80',     w:80,  h:80  },
+  { key:'90',     w:90,  h:90  },
+  { key:'90x52',  w:90,  h:52  },
+  { key:'100',    w:100, h:100 },
+  { key:'105x70', w:105, h:70  },
+  { key:'120x92', w:120, h:92  },
+  { key:'130',    w:130, h:130 },
+  { key:'150x95', w:150, h:95  },
+  { key:'160',    w:160, h:160 },
+  { key:'170x105',w:170, h:105 },
+];
+function getBaseSize(key) {
+  return BASE_SIZES.find(b => b.key === key) || { w:32, h:32 };
+}
+function mmToIn(mm) { return mm / 25.4; }
+function mmToPx(mm) { return mmToIn(mm) * IPX; }
+
+// A "modelGroup" drawing: { type:'modelGroup', label, color, bases:[{x,y}], baseSizeKey, baseRotation, locked }
+// bases are CENTER positions in canvas pixels
+
+let modelsSelectedBases = new Set(); // indices into the active modelGroup being edited
+let modelsEditingIndex  = null;      // drawings[] index of group in edit mode
+let modelsDragStart     = null;      // {x,y} canvas point where drag started
+let modelsDragging      = false;
+let modelsClickAwayTimer = null;
+
+function updateRotationVisibility() {
+  const key = document.getElementById('baseSize')?.value || '';
+  const isOval = key.includes('x');
+  const rotEl = document.getElementById('baseRotation');
+  if (rotEl) {
+    rotEl.style.display = isOval ? 'inline-block' : 'none';
+    if (!isOval) rotEl.value = '0';
+  }
+}
+
+function setModelCount(n) {
+  document.getElementById('modelCount').value = n;
+  // highlight quick-select buttons
+  document.querySelectorAll('.count-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.textContent) === n);
+  });
+}
+
+function buildModelGrid(centerX, centerY, count, wPx, hPx) {
+  const gap   = 2;
+  const stepX = wPx + gap;
+  const stepY = hPx + gap;
+  const cols  = Math.ceil(Math.sqrt(count));
+  const rows  = Math.ceil(count / cols);
+  const startX = centerX - (cols * stepX - gap) / 2 + wPx / 2;
+  const startY = centerY - (rows * stepY - gap) / 2 + hPx / 2;
+  const bases = [];
+  for (let i = 0; i < count; i++) {
+    bases.push({ x: startX + (i % cols) * stepX, y: startY + Math.floor(i / cols) * stepY });
+  }
+  return bases;
+}
+
+function getBaseAtPoint(group, x, y) {
+  const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
+  const rot = (group.baseRotation || 0) * Math.PI / 180;
+  const rw  = mmToPx(sz.w) / 2;
+  const rh  = mmToPx(sz.h) / 2;
+  for (let i = group.bases.length - 1; i >= 0; i--) {
+    const b  = group.bases[i];
+    const dx = x - b.x, dy = y - b.y;
+    // Rotate point into base-local space
+    const lx = dx * Math.cos(-rot) - dy * Math.sin(-rot);
+    const ly = dx * Math.sin(-rot) + dy * Math.cos(-rot);
+    if ((lx*lx)/(rw*rw) + (ly*ly)/(rh*rh) <= 1) return i;
+  }
+  return -1;
+}
+
+function checkCohesion(group) {
+  const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
+  const cohesionPx = 2 * IPX + mmToPx(Math.max(sz.w, sz.h));
+  return group.bases.every((b, i) =>
+    group.bases.some((b2, j) => j !== i && Math.hypot(b.x - b2.x, b.y - b2.y) <= cohesionPx)
+  );
+}
+
+function drawModelGroup(group, isEditing) {
+  const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
+  const rw  = mmToPx(sz.w) / 2;
+  const rh  = mmToPx(sz.h) / 2;
+  const rot = (group.baseRotation || 0) * Math.PI / 180;
+  const inCohesion = group.bases.length <= 1 || checkCohesion(group);
+  const ringColor  = inCohesion ? 'rgba(100,220,100,0.7)' : 'rgba(255,80,80,0.8)';
+
+  group.bases.forEach((b, i) => {
+    const isSelected = isEditing && modelsSelectedBases.has(i);
+
+    // Base fill
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y, rw, rh, rot, 0, Math.PI * 2);
+    ctx.fillStyle = group.color + (isSelected ? 'ff' : 'aa');
+    ctx.fill();
+
+    // Base stroke
+    ctx.strokeStyle = isSelected ? '#fff' : group.color;
+    ctx.lineWidth   = isSelected ? 2.5 : 1.5;
+    ctx.stroke();
+  });
+
+  // Cohesion ring — convex hull approximation: just draw lines between nearest neighbors
+  if (group.bases.length > 1) {
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([4, 3]);
+    group.bases.forEach((b, i) => {
+      // Find nearest neighbor
+      let minD = Infinity, nearest = null;
+      group.bases.forEach((b2, j) => {
+        if (j === i) return;
+        const d = Math.hypot(b.x - b2.x, b.y - b2.y);
+        if (d < minD) { minD = d; nearest = b2; }
+      });
+      if (nearest) {
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(nearest.x, nearest.y);
+        ctx.stroke();
+      }
+    });
+    ctx.setLineDash([]);
+  }
+
+  // Label (center of mass)
+  if (group.label) {
+    const cx = group.bases.reduce((s, b) => s + b.x, 0) / group.bases.length;
+    const cy = group.bases.reduce((s, b) => s + b.y, 0) / group.bases.length;
+    const minY = Math.min(...group.bases.map(b => b.y)) - r - 14;
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(group.label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(cx - tw / 2 - 5, minY - 9, tw + 10, 18);
+    ctx.fillStyle = group.color;
+    ctx.fillText(group.label, cx, minY);
+  }
+
+  // Edit mode indicator
+  if (isEditing) {
+    const minX = Math.min(...group.bases.map(b => b.x)) - r - 6;
+    const minY2 = Math.min(...group.bases.map(b => b.y)) - r - 6;
+    const maxX = Math.max(...group.bases.map(b => b.x)) + r + 6;
+    const maxY2 = Math.max(...group.bases.map(b => b.y)) + r + 6;
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(minX, minY2, maxX - minX, maxY2 - minY2);
+    ctx.setLineDash([]);
+  }
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -445,6 +631,7 @@ function bindCanvas() {
   canvas.addEventListener('dblclick', handleDoubleClick);
   canvas.addEventListener('mouseup', handleMouseUp);
   canvas.addEventListener('mouseleave', handleMouseUp);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 // ─── Selection Handlers ───────────────────────────────────────────────────────
@@ -471,13 +658,26 @@ function selectMission(id) {
 }
 
 function selectTool(tool) {
+  // Toggle off if clicking the already-active tool (except draw, which is default)
+  if (currentTool === tool && tool !== 'draw') {
+    tool = 'draw';
+  }
   currentTool = tool;
   currentPoints = [];
   measurePoints = [];
+  // Exit model edit mode when switching away
+  if (tool !== 'models') {
+    modelsEditingIndex = null;
+    modelsSelectedBases.clear();
+  }
   hideDrawingHint();
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`[data-tool="${tool}"]`);
   if (btn) btn.classList.add('active');
+  // Show hint for models tool
+  if (tool === 'models') {
+    showDrawingHint('🪖 Double-click to place models · Click base to select · Drag to move · Double-click group to lock/unlock');
+  }
   drawScene();
 }
 
@@ -885,11 +1085,12 @@ function drawTerrainPiece(piece) {
 }
 
 function drawUserDrawings() {
-  drawings.forEach(drawing => {
-    if (drawing.type === 'unit') drawUnit(drawing);
-    else if (drawing.type === 'measure') drawMeasure(drawing);
-    else if (drawing.type === 'sight') drawSight(drawing);
-    else if (drawing.type === 'label') drawLabel(drawing);
+  drawings.forEach((drawing, i) => {
+    if      (drawing.type === 'unit')       drawUnit(drawing);
+    else if (drawing.type === 'measure')    drawMeasure(drawing);
+    else if (drawing.type === 'sight')      drawSight(drawing);
+    else if (drawing.type === 'label')      drawLabel(drawing);
+    else if (drawing.type === 'modelGroup') drawModelGroup(drawing, i === modelsEditingIndex);
   });
 }
 
@@ -1069,7 +1270,94 @@ function handleMouseDown(e) {
         drawScene();
       }
     });
+
+  } else if (currentTool === 'models') {
+    handleModelsMouseDown(e, x, y);
   }
+}
+
+function handleModelsMouseDown(e, x, y) {
+  // Right-click in edit mode: remove base
+  if (e.button === 2 && modelsEditingIndex !== null) {
+    const group = drawings[modelsEditingIndex];
+    const bi = getBaseAtPoint(group, x, y);
+    if (bi >= 0) {
+      group.bases.splice(bi, 1);
+      modelsSelectedBases.clear();
+      if (group.bases.length === 0) {
+        drawings.splice(modelsEditingIndex, 1);
+        modelsEditingIndex = null;
+      }
+      drawScene();
+      updateUnitsList();
+    }
+    return;
+  }
+  if (e.button !== 0) return;
+
+  // Check if clicking on an existing group
+  for (let gi = drawings.length - 1; gi >= 0; gi--) {
+    const d = drawings[gi];
+    if (d.type !== 'modelGroup') continue;
+    const bi = getBaseAtPoint(d, x, y);
+    if (bi >= 0) {
+      if (modelsEditingIndex === gi) {
+        // Already editing — select/deselect base
+        if (e.shiftKey) {
+          if (modelsSelectedBases.has(bi)) modelsSelectedBases.delete(bi);
+          else modelsSelectedBases.add(bi);
+          modelsDragStart = null; // shift-click never starts drag
+        } else if (modelsSelectedBases.has(bi)) {
+          // Clicking an already-selected base — allow drag
+          modelsDragStart = { x, y };
+          modelsDragging  = false;
+        } else {
+          // Clicking an unselected base — just select, no drag yet
+          modelsSelectedBases.clear();
+          modelsSelectedBases.add(bi);
+          modelsDragStart = null;
+        }
+      } else {
+        // Click on a different group — enter edit mode, select base, no drag yet
+        modelsEditingIndex = gi;
+        modelsSelectedBases.clear();
+        modelsSelectedBases.add(bi);
+        modelsDragStart = null;
+      }
+      if (modelsClickAwayTimer) { clearTimeout(modelsClickAwayTimer); modelsClickAwayTimer = null; }
+      drawScene();
+      return;
+    }
+  }
+
+  // Clicked empty space — deselect after short delay so double-click can cancel it
+  if (modelsClickAwayTimer) clearTimeout(modelsClickAwayTimer);
+  modelsClickAwayTimer = setTimeout(() => {
+    modelsClickAwayTimer = null;
+    modelsEditingIndex = null;
+    modelsSelectedBases.clear();
+    drawScene();
+    updateUnitsList();
+  }, 220);
+}
+
+function placeModelGroup(x, y) {
+  const sizeKey = document.getElementById('baseSize').value;
+  const sz      = getBaseSize(sizeKey);
+  const rot     = parseInt(document.getElementById('baseRotation')?.value || '0');
+  const count   = parseInt(document.getElementById('modelCount').value) || 1;
+  // If rotated 90°, swap w/h for grid layout
+  const wPx = mmToPx(rot === 90 ? sz.h : sz.w);
+  const hPx = mmToPx(rot === 90 ? sz.w : sz.h);
+  const bases  = buildModelGrid(x, y, count, wPx, hPx);
+  const label  = document.getElementById('unitName').value || 'Unit';
+  const group  = { type: 'modelGroup', label, color: currentColor, baseSizeKey: sizeKey, baseRotation: rot, bases };
+  drawings.push(group);
+  modelsEditingIndex = drawings.length - 1;
+  modelsSelectedBases = new Set(bases.map((_, i) => i));
+  modelsDragStart = null;
+  drawScene();
+  updateUnitsList();
 }
 
 function handleMouseMove(e) {
@@ -1083,6 +1371,23 @@ function handleMouseMove(e) {
     const dy = y - dragOffset.y - cy;
     unit.points.forEach(pt => { pt.x += dx; pt.y += dy; });
     drawScene();
+    return;
+  }
+
+  // Models tool drag
+  if (currentTool === 'models' && modelsDragStart && modelsEditingIndex !== null && modelsSelectedBases.size > 0) {
+    const dx = x - modelsDragStart.x;
+    const dy = y - modelsDragStart.y;
+    if (!modelsDragging && Math.hypot(dx, dy) > 3) modelsDragging = true;
+    if (modelsDragging) {
+      const group = drawings[modelsEditingIndex];
+      modelsSelectedBases.forEach(bi => {
+        group.bases[bi].x += dx;
+        group.bases[bi].y += dy;
+      });
+      modelsDragStart = { x, y };
+      drawScene();
+    }
     return;
   }
 
@@ -1118,6 +1423,33 @@ function handleDoubleClick(e) {
     drawScene();
     updateUnitsList();
   }
+
+  if (currentTool === 'models') {
+    const { x, y } = getCanvasPoint(e);
+    // Check if double-clicking on an existing group
+    for (let gi = drawings.length - 1; gi >= 0; gi--) {
+      const d = drawings[gi];
+      if (d.type !== 'modelGroup') continue;
+      const bi = getBaseAtPoint(d, x, y);
+      if (bi >= 0) {
+        if (modelsEditingIndex === gi) {
+          // Already editing — lock (exit edit mode)
+          modelsEditingIndex = null;
+          modelsSelectedBases.clear();
+        } else {
+          // Enter edit mode, select clicked base
+          modelsEditingIndex = gi;
+          modelsSelectedBases.clear();
+          modelsSelectedBases.add(bi);
+        }
+        drawScene();
+        return;
+      }
+    }
+    // Double-clicked empty space — place new group (cancel any pending click-away)
+    if (modelsClickAwayTimer) { clearTimeout(modelsClickAwayTimer); modelsClickAwayTimer = null; }
+    placeModelGroup(x, y);
+  }
 }
 
 function handleMouseUp() {
@@ -1127,6 +1459,10 @@ function handleMouseUp() {
     canvas.style.cursor = 'crosshair';
     drawScene();
   }
+  if (modelsDragStart) {
+    modelsDragStart = null;
+    modelsDragging  = false;
+  }
 }
 
 // ─── Units List ───────────────────────────────────────────────────────────────
@@ -1134,7 +1470,7 @@ function updateUnitsList() {
   const list = document.getElementById('unitsList');
   list.innerHTML = '';
   drawings.forEach((d, i) => {
-    if (d.type !== 'unit') return;
+    if (d.type !== 'unit' && d.type !== 'modelGroup') return;
     const item = document.createElement('div');
     item.className = 'unit-item';
 
@@ -1143,8 +1479,10 @@ function updateUnitsList() {
     dot.style.backgroundColor = d.color;
 
     const lbl = document.createElement('span');
-    lbl.textContent = d.label || 'Unit';
+    const suffix = d.type === 'modelGroup' ? ` (${d.bases.length}×${d.baseSizeMm}mm)` : '';
+    lbl.textContent = (d.label || 'Unit') + suffix;
     lbl.style.flex = '1';
+    lbl.style.fontSize = '12px';
 
     const del = document.createElement('span');
     del.textContent = '🗑️';
@@ -1154,6 +1492,7 @@ function updateUnitsList() {
       ev.stopPropagation();
       modalConfirm('Delete Unit', `Delete "${d.label || 'Unit'}"?`, 'Delete', true).then(ok => {
         if (ok) {
+          if (modelsEditingIndex === i) { modelsEditingIndex = null; modelsSelectedBases.clear(); }
           drawings.splice(i, 1);
           drawScene();
           updateUnitsList();
@@ -1175,17 +1514,25 @@ function updateUnitsList() {
 }
 
 // ─── Hints ────────────────────────────────────────────────────────────────────
-function showDrawingHint() {
-  if (hintElement) return;
+function showDrawingHint(text) {
   const wrapper = document.getElementById('canvasWrapper');
-  hintElement = document.createElement('div');
-  hintElement.className = 'drawing-hint';
-  hintElement.textContent = '👆 Click to add points — Double-click to finish unit';
-  wrapper.appendChild(hintElement);
+  if (!hintElement) {
+    hintElement = document.createElement('div');
+    hintElement.className = 'drawing-hint';
+    wrapper.appendChild(hintElement);
+  }
+  hintElement.textContent = text || '👆 Click to add points — Double-click to finish unit';
 }
 
 function hideDrawingHint() {
   if (hintElement) { hintElement.remove(); hintElement = null; }
+}
+
+function updateHintForTool() {
+  hideDrawingHint();
+  if (currentTool === 'models') {
+    showDrawingHint('🪖 Click to place models — Click to select · Shift+click multi-select · Double-click group to edit/lock');
+  }
 }
 
 // ─── Save / Load ──────────────────────────────────────────────────────────────
@@ -1245,6 +1592,8 @@ function clearCanvas() {
       drawings = [];
       currentPoints = [];
       measurePoints = [];
+      modelsEditingIndex = null;
+      modelsSelectedBases.clear();
       drawingHintShown = false;
       hideDrawingHint();
       drawScene();

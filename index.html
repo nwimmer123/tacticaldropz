@@ -50,6 +50,42 @@
             <input type="text" id="unitName" placeholder="Unit name..." style="width:140px;">
           </div>
 
+          <div class="toolbar-section" id="placeModelsSection">
+            <button class="tool-btn" data-tool="models">🪖 Place Models</button>
+            <button class="tool-btn tool-btn-info" onclick="showModelsHelp()" title="How to use Place Models">ⓘ</button>
+            <select id="baseSize" class="nav-select" style="width:90px;" onchange="updateRotationVisibility()">
+              <option value="25">25mm</option>
+              <option value="28">28mm</option>
+              <option value="32" selected>32mm</option>
+              <option value="40">40mm</option>
+              <option value="50">50mm</option>
+              <option value="60">60mm</option>
+              <option value="60x35">60x35mm</option>
+              <option value="70">70mm</option>
+              <option value="75x42">75x42mm</option>
+              <option value="80">80mm</option>
+              <option value="90">90mm</option>
+              <option value="90x52">90x52mm</option>
+              <option value="100">100mm</option>
+              <option value="105x70">105x70mm</option>
+              <option value="120x92">120x92mm</option>
+              <option value="130">130mm</option>
+              <option value="150x95">150x95mm</option>
+              <option value="160">160mm</option>
+              <option value="170x105">170x105mm</option>
+            </select>
+            <select id="baseRotation" class="nav-select" style="width:60px; display:none;" title="Oval rotation">
+              <option value="0">0°</option>
+              <option value="90">90°</option>
+            </select>
+            <div class="model-count-group">
+              <button class="count-btn" onclick="setModelCount(1)">1</button>
+              <button class="count-btn" onclick="setModelCount(5)">5</button>
+              <button class="count-btn" onclick="setModelCount(10)">10</button>
+              <input type="number" id="modelCount" value="5" min="1" max="30" style="width:44px;">
+            </div>
+          </div>
+
           <div class="toolbar-section">
             <button class="tool-btn" onclick="clearCanvas()">🗑️ Clear</button>
             <button class="tool-btn" onclick="savePlan()">💾 Save</button>

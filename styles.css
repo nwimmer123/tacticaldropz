@@ -349,97 +349,64 @@ input[type="text"]::placeholder { color: #555; }
 
 /* ── Modal ── */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0,0,0,0.7);
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   animation: fadeIn 0.15s ease-out;
 }
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
 .modal-box {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 8px;
-  padding: 24px;
-  min-width: 300px;
-  max-width: 420px;
-  width: 90%;
+  background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+  padding: 24px; min-width: 300px; max-width: 460px; width: 90%;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
   animation: slideUp 0.15s ease-out;
 }
-
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity:0; transform: translateY(12px); }
+  to   { opacity:1; transform: translateY(0); }
 }
-
-.modal-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 10px;
-}
-
-.modal-body {
-  font-size: 13px;
-  color: #aaa;
-  margin-bottom: 16px;
-  line-height: 1.5;
-}
-
+.modal-title { font-size:15px; font-weight:600; color:#fff; margin-bottom:10px; }
+.modal-body  { font-size:13px; color:#aaa; margin-bottom:16px; line-height:1.6; }
+.modal-body ul { padding-left: 18px; margin: 6px 0; }
+.modal-body li { margin-bottom: 4px; }
+.modal-body .shortcut { display:inline-block; background:#0f3460; border:1px solid #1a508b; border-radius:3px; padding:1px 6px; font-family:monospace; font-size:12px; color:#4ecdc4; margin:0 2px; }
+.modal-body h4 { color:#e94560; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; margin: 12px 0 4px; }
 .modal-input {
-  width: 100%;
-  margin-bottom: 16px;
-  padding: 8px 10px;
-  background: #0f3460;
-  border: 1px solid #1a508b;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 13px;
-  outline: none;
+  width:100%; margin-bottom:16px; padding:8px 10px;
+  background:#0f3460; border:1px solid #1a508b; border-radius:4px;
+  color:#fff; font-size:13px; outline:none;
 }
+.modal-input:focus { border-color:#e94560; }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+.modal-btn { padding:8px 18px; border:none; border-radius:4px; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; }
+.modal-btn-primary   { background:#e94560; color:#fff; }
+.modal-btn-primary:hover   { background:#c73652; }
+.modal-btn-secondary { background:#0f3460; border:1px solid #1a508b; color:#aaa; }
+.modal-btn-secondary:hover { background:#1a508b; color:#fff; }
+.modal-btn-danger    { background:#c0392b; color:#fff; }
+.modal-btn-danger:hover    { background:#a93226; }
 
-.modal-input:focus { border-color: #e94560; }
-
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+/* ── Place Models toolbar controls ── */
+.tool-btn-info {
+  padding: 7px 9px;
+  font-size: 14px;
+  opacity: 0.7;
 }
+.tool-btn-info:hover { opacity: 1; }
 
-.modal-btn {
-  padding: 8px 18px;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
+.model-count-group {
+  display: flex; gap: 4px; align-items: center;
 }
+.count-btn {
+  padding: 6px 9px;
+  background: #0f3460; border: 1px solid #1a508b;
+  border-radius: 4px; color: #aaa; font-size: 12px;
+  cursor: pointer; transition: all 0.2s;
+}
+.count-btn:hover  { background:#1a508b; color:#fff; }
+.count-btn.active { background:#e94560; border-color:#e94560; color:#fff; }
 
-.modal-btn-primary {
-  background: #e94560;
-  color: #fff;
-}
-.modal-btn-primary:hover { background: #c73652; }
-
-.modal-btn-secondary {
-  background: #0f3460;
-  border: 1px solid #1a508b;
-  color: #aaa;
-}
-.modal-btn-secondary:hover { background: #1a508b; color: #fff; }
-
-.modal-btn-danger {
-  background: #c0392b;
-  color: #fff;
-}
-.modal-btn-danger:hover { background: #a93226; }
+/* ── Model bases on canvas ── */
+.cohesion-ok  { stroke: rgba(100,220,100,0.8); }
+.cohesion-bad { stroke: rgba(255,80,80,0.8);   }
