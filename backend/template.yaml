@@ -107,7 +107,7 @@ Resources:
         - AttributeName: unitKey
           KeyType: HASH
         - AttributeName: edition
-          AttributeType: RANGE
+          KeyType: RANGE
 
   ListsTable:
     Type: AWS::DynamoDB::Table
