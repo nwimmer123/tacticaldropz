@@ -1,0 +1,22 @@
+# Environment & secrets
+.env
+.env.local
+.env.production
+*.pem
+*credentials*
+.aws/
+
+# AWS SAM / CDK build artifacts
+.aws-sam/
+cdk.out/
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
