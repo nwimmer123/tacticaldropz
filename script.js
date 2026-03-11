@@ -131,6 +131,13 @@ let modelsSelectedBases = new Set(); // indices into the active modelGroup being
 let modelsEditingIndex  = null;      // drawings[] index of group in edit mode
 let modelsDragStart     = null;      // {x,y} canvas point where drag started
 let modelsDragging      = false;
+let modelsRotating      = false;  // true when dragging rotation handle
+let modelsRotateAnchor  = null;   // {x,y} center of last selected base
+let modelsRotateStart   = null;   // starting angle of drag
+
+function isOval(baseSizeKey) {
+  return String(baseSizeKey || '').includes('x');
+}
 
 function updateRotationVisibility() {
   const key = document.getElementById('baseSize')?.value || '';
@@ -193,12 +200,13 @@ function drawModelGroup(group, isEditing) {
   const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
   const rw  = mmToPx(sz.w) / 2;
   const rh  = mmToPx(sz.h) / 2;
-  const rot = (group.baseRotation || 0) * Math.PI / 180;
+  const groupRot = (group.baseRotation || 0) * Math.PI / 180;
   const inCohesion = group.bases.length <= 1 || checkCohesion(group);
   const ringColor  = inCohesion ? 'rgba(100,220,100,0.7)' : 'rgba(255,80,80,0.8)';
 
   group.bases.forEach((b, i) => {
     const isSelected = isEditing && modelsSelectedBases.has(i);
+    const rot = (b.rot !== undefined) ? b.rot : groupRot;
 
     // Base fill
     ctx.beginPath();
@@ -261,6 +269,42 @@ function drawModelGroup(group, isEditing) {
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(minX, minY2, maxX - minX, maxY2 - minY2);
     ctx.setLineDash([]);
+
+    // Rotation handle — show on last selected base if group is oval
+    if (isOval(group.baseSizeKey) && modelsSelectedBases.size > 0) {
+      const lastSel = [...modelsSelectedBases].at(-1);
+      const b = group.bases[lastSel];
+      const rot = (b.rot !== undefined) ? b.rot : groupRot;
+      const handleDist = Math.max(rw, rh) + 18;
+      const hx = b.x + Math.cos(rot - Math.PI / 2) * handleDist;
+      const hy = b.y + Math.sin(rot - Math.PI / 2) * handleDist;
+
+      // Stem line
+      ctx.strokeStyle = 'rgba(255,200,0,0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Handle circle
+      ctx.beginPath();
+      ctx.arc(hx, hy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,200,0,0.9)';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Rotation arrow icon inside handle
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = '#000';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('↻', hx, hy);
+    }
   }
 }
 
@@ -507,7 +551,7 @@ function buildNav() {
   const about = document.createElement('a');
   about.href = 'about.html';
   about.className = 'nav-link';
-  about.textContent = 'About/Help';
+  about.textContent = 'About';
   nav.appendChild(about);
 
   // Feedback link
@@ -764,14 +808,14 @@ function drawUnit(drawing) {
   if (drawing.label) {
     const cx = drawing.points.reduce((s, p) => s + p.x, 0) / drawing.points.length;
     const cy = drawing.points.reduce((s, p) => s + p.y, 0) / drawing.points.length;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    const tw = ctx.measureText(drawing.label).width;
-    ctx.fillRect(cx - tw / 2 - 4, cy - 8, tw + 8, 18);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(drawing.label, cx, cy + 1);
+    const tw = ctx.measureText(drawing.label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(cx - tw / 2 - 5, cy - 9, tw + 10, 18);
+    ctx.fillStyle = drawing.color;
+    ctx.fillText(drawing.label, cx, cy);
   }
 }
 
@@ -882,6 +926,25 @@ function isPointInUnit(x, y, unit) {
 
 function clipLosToTerrain(start, end) { return end; }
 
+function getRotationHandle(group) {
+  // Returns {x,y,baseIndex} of rotation handle, or null
+  if (!isOval(group.baseSizeKey) || modelsSelectedBases.size === 0) return null;
+  const sz = getBaseSize(group.baseSizeKey);
+  const rw = mmToPx(sz.w) / 2;
+  const rh = mmToPx(sz.h) / 2;
+  const lastSel = [...modelsSelectedBases].at(-1);
+  const b = group.bases[lastSel];
+  const groupRot = (group.baseRotation || 0) * Math.PI / 180;
+  const rot = (b.rot !== undefined) ? b.rot : groupRot;
+  const handleDist = Math.max(rw, rh) + 18;
+  return {
+    x: b.x + Math.cos(rot - Math.PI / 2) * handleDist,
+    y: b.y + Math.sin(rot - Math.PI / 2) * handleDist,
+    baseIndex: lastSel,
+    bx: b.x, by: b.y
+  };
+}
+
 function distToSegment(px, py, ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay;
   const lenSq = dx * dx + dy * dy;
@@ -974,6 +1037,17 @@ function handleMouseDown(e) {
 }
 
 function handleModelsMouseDown(e, x, y) {
+  // Check rotation handle first (only in edit mode, left click)
+  if (e.button === 0 && modelsEditingIndex !== null) {
+    const group = drawings[modelsEditingIndex];
+    const handle = getRotationHandle(group);
+    if (handle && Math.hypot(x - handle.x, y - handle.y) <= 10) {
+      modelsRotating    = true;
+      modelsRotateAnchor = { x: handle.bx, y: handle.by };
+      modelsRotateStart  = Math.atan2(y - handle.by, x - handle.bx);
+      return;
+    }
+  }
 
   // Right-click in edit mode: remove base
   if (e.button === 2 && modelsEditingIndex !== null) {
@@ -1062,6 +1136,22 @@ function handleMouseMove(e) {
     return;
   }
 
+  // Models rotation drag
+  if (currentTool === 'models' && modelsRotating && modelsEditingIndex !== null) {
+    const currentAngle = Math.atan2(y - modelsRotateAnchor.y, x - modelsRotateAnchor.x);
+    const delta = currentAngle - modelsRotateStart;
+    modelsRotateStart = currentAngle;
+    const group = drawings[modelsEditingIndex];
+    const groupRot = (group.baseRotation || 0) * Math.PI / 180;
+    modelsSelectedBases.forEach(bi => {
+      const b = group.bases[bi];
+      const cur = (b.rot !== undefined) ? b.rot : groupRot;
+      b.rot = cur + delta;
+    });
+    drawScene();
+    return;
+  }
+
   // Models tool drag
   if (currentTool === 'models' && modelsDragStart && modelsEditingIndex !== null && modelsSelectedBases.size > 0) {
     const dx = x - modelsDragStart.x;
@@ -1123,6 +1213,11 @@ function handleMouseUp() {
   if (modelsDragStart) {
     modelsDragStart = null;
     modelsDragging  = false;
+  }
+  if (modelsRotating) {
+    modelsRotating     = false;
+    modelsRotateAnchor = null;
+    modelsRotateStart  = null;
   }
 }
 
