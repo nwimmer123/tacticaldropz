@@ -6,9 +6,9 @@ on:
       - main
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
 
+  deploy-frontend:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -20,13 +20,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Sync to S3
+      - name: Sync frontend to S3
         run: |
           aws s3 sync . s3://tacticaldropz.com \
             --exclude ".git/*" \
             --exclude ".github/*" \
             --exclude ".gitignore" \
             --exclude "*.md" \
+            --exclude "backend/*" \
             --delete
 
       - name: Invalidate CloudFront cache
@@ -34,3 +35,35 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id E3S7J49MEY8WIA \
             --paths "/*"
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install SAM CLI
+        run: pip install aws-sam-cli
+
+      - name: Build and deploy backend
+        working-directory: backend
+        run: |
+          sam build
+          sam deploy \
+            --stack-name tacticaldropz-backend \
+            --s3-bucket tacticaldropz-sam-artifacts \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
