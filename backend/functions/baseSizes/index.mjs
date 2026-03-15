@@ -64,7 +64,7 @@ export const handler = async (event) => {
       const userId = event.requestContext?.authorizer?.claims?.sub;
       if (!userId) return response(401, { error: 'Unauthorized' });
 
-      const { unitName, faction, baseSizeKey, edition = '10th' } = body;
+      const { unitName, faction, baseSizeKey, shape = 'circle', edition = '10th' } = body;
       if (!unitName || !faction || !baseSizeKey) {
         return response(400, { error: 'unitName, faction and baseSizeKey required' });
       }
@@ -100,6 +100,7 @@ export const handler = async (event) => {
           unitName:      unitName.trim(),
           faction:       faction.trim(),
           baseSizeKey,
+          shape:         body.shape || 'circle',
           voteCount:     1,
           submittedBy:   userId,
           schemaVersion: '1.0',

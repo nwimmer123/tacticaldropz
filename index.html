@@ -29,7 +29,7 @@
 
         <div class="toolbar">
           <div class="toolbar-section">
-            <button class="tool-btn active" data-tool="draw">✏️ Draw Unit</button>
+            <button class="tool-btn" data-tool="draw">✏️ Draw Unit</button>
             <button class="tool-btn" data-tool="measure">📏 Measure</button>
             <button class="tool-btn" data-tool="label">🏷️ Label</button>
             <button class="tool-btn" data-tool="sight">👁️ Line of Sight</button>
@@ -51,33 +51,29 @@
           </div>
 
           <div class="toolbar-section" id="placeModelsSection">
-            <button class="tool-btn" data-tool="models">🪖 Place Models</button>
+            <button class="tool-btn active" data-tool="models">🪖 Place Models</button>
             <button class="tool-btn tool-btn-info" onclick="showModelsHelp()" title="How to use Place Models">ⓘ</button>
-            <select id="baseSize" class="nav-select" style="width:90px;" onchange="updateRotationVisibility()">
+            <select id="baseSize" class="nav-select" style="width:100px;" onchange="updateShapePicker()">
               <option value="25">25mm</option>
               <option value="28">28mm</option>
               <option value="32" selected>32mm</option>
               <option value="40">40mm</option>
               <option value="50">50mm</option>
               <option value="60">60mm</option>
-              <option value="60x35">60x35mm</option>
               <option value="70">70mm</option>
-              <option value="75x42">75x42mm</option>
+              <option value="75x42o">75×42mm</option>
               <option value="80">80mm</option>
               <option value="90">90mm</option>
-              <option value="90x52">90x52mm</option>
+              <option value="90x52o">90×52mm</option>
               <option value="100">100mm</option>
-              <option value="105x70">105x70mm</option>
-              <option value="120x92">120x92mm</option>
+              <option value="105x70o">105×70mm</option>
+              <option value="120x92o">120×92mm</option>
               <option value="130">130mm</option>
-              <option value="150x95">150x95mm</option>
+              <option value="150x95o">150×95mm</option>
               <option value="160">160mm</option>
-              <option value="170x105">170x105mm</option>
+              <option value="170x105o">170×105mm</option>
             </select>
-            <select id="baseRotation" class="nav-select" style="width:60px; display:none;" title="Oval rotation">
-              <option value="0">0°</option>
-              <option value="90">90°</option>
-            </select>
+            <div id="shapePicker" class="shape-picker"></div>
             <div class="model-count-group">
               <button class="count-btn" onclick="setModelCount(1)">1</button>
               <button class="count-btn" onclick="setModelCount(5)">5</button>
@@ -93,6 +89,19 @@
           </div>
         </div>
 
+        <!-- ── Staging Area ── -->
+        <div class="staging-area" id="stagingArea">
+          <div class="staging-header">
+            <span class="staging-title">📦 Staging Area</span>
+            <span class="staging-hint" id="stagingHint">Import a list to begin — or place units directly on the board</span>
+            <div class="staging-actions">
+              <button class="tool-btn" onclick="openImportModal()">📋 Import List</button>
+              <button class="tool-btn" id="clearListBtn" onclick="clearList()" style="display:none">🗑️ Clear List</button>
+            </div>
+          </div>
+          <div class="staging-units" id="stagingUnits"></div>
+        </div>
+
         <div class="canvas-with-sidebar">
           <div class="canvas-wrapper" id="canvasWrapper">
             <canvas id="battlefield" width="900" height="660"></canvas>
@@ -104,6 +113,52 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Review Modal ── -->
+  <div id="reviewModalOverlay" class="modal-overlay" style="display:none">
+    <div class="modal-box review-modal-box">
+      <div class="modal-title" id="reviewModalTitle">Review Units</div>
+      <div class="modal-body">Confirm model counts and base sizes before staging. <span style="color:#f1c40f">?</span> = inferred, please verify.</div>
+      <div class="review-table-wrapper">
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Unit</th>
+              <th>Count</th>
+              <th>Base Size</th>
+              <th>Shape</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="reviewTableBody"></tbody>
+        </table>
+      </div>
+      <div class="modal-actions" style="margin-top:12px">
+        <button class="modal-btn modal-btn-secondary" onclick="closeReviewModal()">Cancel</button>
+        <button class="modal-btn modal-btn-primary" onclick="confirmReview()">Stage Units →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Import List Modal ── -->
+  <div id="importModalOverlay" class="modal-overlay" style="display:none">
+    <div class="modal-box import-modal-box">
+      <div class="modal-title">📋 Import Army List</div>
+      <div class="modal-body">
+        Paste your list from <strong>New Recruit</strong> (Short format) or the <strong>GW App</strong>.
+      </div>
+      <div class="import-meta" id="importMeta"></div>
+      <textarea id="importTextarea" class="import-textarea" placeholder="Paste your army list here..."></textarea>
+      <div class="import-footer">
+        <span class="import-line-count" id="importLineCount">0 lines</span>
+        <div class="modal-actions">
+          <button class="modal-btn modal-btn-secondary" onclick="closeImportModal()">Cancel</button>
+          <button class="modal-btn modal-btn-primary" onclick="parseAndImport()">Import →</button>
+        </div>
       </div>
     </div>
   </div>

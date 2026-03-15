@@ -97,55 +97,88 @@ function showModelsHelp() {
 // ─── Place Models State ───────────────────────────────────────────────────────
 // Base sizes in inches (diameter)
 // Each entry: { w, h } in mm. Ovals have w != h.
+// shape: 'circle' | 'oval' | 'rectangle'
 const BASE_SIZES = [
-  { key:'25',     w:25,  h:25  },
-  { key:'28',     w:28,  h:28  },
-  { key:'32',     w:32,  h:32  },
-  { key:'40',     w:40,  h:40  },
-  { key:'50',     w:50,  h:50  },
-  { key:'60',     w:60,  h:60  },
-  { key:'60x35',  w:60,  h:35  },
-  { key:'70',     w:70,  h:70  },
-  { key:'75x42',  w:75,  h:42  },
-  { key:'80',     w:80,  h:80  },
-  { key:'90',     w:90,  h:90  },
-  { key:'90x52',  w:90,  h:52  },
-  { key:'100',    w:100, h:100 },
-  { key:'105x70', w:105, h:70  },
-  { key:'120x92', w:120, h:92  },
-  { key:'130',    w:130, h:130 },
-  { key:'150x95', w:150, h:95  },
-  { key:'160',    w:160, h:160 },
-  { key:'170x105',w:170, h:105 },
+  { key:'25',      w:25,  h:25,  shape:'circle'    },
+  { key:'28',      w:28,  h:28,  shape:'circle'    },
+  { key:'32',      w:32,  h:32,  shape:'circle'    },
+  { key:'40',      w:40,  h:40,  shape:'circle'    },
+  { key:'50',      w:50,  h:50,  shape:'circle'    },
+  { key:'60',      w:60,  h:60,  shape:'circle'    },
+  { key:'60x35o',  w:60,  h:35,  shape:'oval'      },
+  { key:'70',      w:70,  h:70,  shape:'circle'    },
+  { key:'75x42o',  w:75,  h:42,  shape:'oval'      },
+  { key:'80',      w:80,  h:80,  shape:'circle'    },
+  { key:'90',      w:90,  h:90,  shape:'circle'    },
+  { key:'90x52o',  w:90,  h:52,  shape:'oval'      },
+  { key:'100',     w:100, h:100, shape:'circle'    },
+  { key:'105x70o', w:105, h:70,  shape:'oval'      },
+  { key:'105x70r', w:105, h:70,  shape:'rectangle' },
+  { key:'120x92o', w:120, h:92,  shape:'oval'      },
+  { key:'120x92r', w:120, h:92,  shape:'rectangle' },
+  { key:'130',     w:130, h:130, shape:'circle'    },
+  { key:'150x95o', w:150, h:95,  shape:'oval'      },
+  { key:'150x95r', w:150, h:95,  shape:'rectangle' },
+  { key:'160',     w:160, h:160, shape:'circle'    },
+  { key:'170x105o',w:170, h:105, shape:'oval'      },
+  { key:'170x105r',w:170, h:105, shape:'rectangle' },
 ];
+
 function getBaseSize(key) {
-  return BASE_SIZES.find(b => b.key === key) || { w:32, h:32 };
+  return BASE_SIZES.find(b => b.key === key) || { w:32, h:32, shape:'circle' };
 }
 function mmToIn(mm) { return mm / 25.4; }
 function mmToPx(mm) { return mmToIn(mm) * IPX; }
 
-// A "modelGroup" drawing: { type:'modelGroup', label, color, bases:[{x,y}], baseSizeKey, baseRotation, locked }
+// Shape SVG icons for the picker
+const SHAPE_SVGS = {
+  circle:    `<svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="2"/></svg>`,
+  oval:      `<svg width="22" height="16" viewBox="0 0 22 16"><ellipse cx="11" cy="8" rx="9" ry="5.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>`,
+  rectangle: `<svg width="22" height="16" viewBox="0 0 22 16"><rect x="2" y="2" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>`,
+};
+
+// A "modelGroup" drawing: { type:'modelGroup', label, color, bases:[{x,y}], baseSizeKey, shape, baseRotation, locked }
 // bases are CENTER positions in canvas pixels
 
 let modelsSelectedBases = new Set(); // indices into the active modelGroup being edited
 let modelsEditingIndex  = null;      // drawings[] index of group in edit mode
 let modelsDragStart     = null;      // {x,y} canvas point where drag started
 let modelsDragging      = false;
-let modelsRotating      = false;  // true when dragging rotation handle
-let modelsRotateAnchor  = null;   // {x,y} center of last selected base
-let modelsRotateStart   = null;   // starting angle of drag
 
-function isOval(baseSizeKey) {
-  return String(baseSizeKey || '').includes('x');
-}
+function updateShapePicker() {
+  const sizeKey  = document.getElementById('baseSize')?.value || '32';
+  const picker   = document.getElementById('shapePicker');
+  if (!picker) return;
 
-function updateRotationVisibility() {
-  const key = document.getElementById('baseSize')?.value || '';
-  const isOval = key.includes('x');
-  const rotEl = document.getElementById('baseRotation');
-  if (rotEl) {
-    rotEl.style.display = isOval ? 'inline-block' : 'none';
-    if (!isOval) rotEl.value = '0';
+  // Find which shapes are available for this dimension
+  const dim = sizeKey.replace(/[or]$/, ''); // strip shape suffix if any
+  const available = BASE_SIZES.filter(b => b.key.replace(/[or]$/, '') === dim || b.key === dim);
+  const shapes    = [...new Set(available.map(b => b.shape))];
+
+  picker.innerHTML = '';
+  shapes.forEach(shape => {
+    const btn = document.createElement('button');
+    btn.className   = 'shape-btn';
+    btn.dataset.shape = shape;
+    btn.title       = shape.charAt(0).toUpperCase() + shape.slice(1);
+    btn.innerHTML   = SHAPE_SVGS[shape];
+    // Find the matching key for this size+shape
+    const match = BASE_SIZES.find(b => (b.key.replace(/[or]$/, '') === dim || b.key === dim) && b.shape === shape);
+    btn.onclick = () => {
+      if (match) document.getElementById('baseSize').value = match.key;
+      picker.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    picker.appendChild(btn);
+  });
+
+  // Auto-select current shape
+  const current = BASE_SIZES.find(b => b.key === sizeKey);
+  if (current) {
+    const activeBtn = picker.querySelector(`[data-shape="${current.shape}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+  } else if (picker.firstChild) {
+    picker.firstChild.classList.add('active');
   }
 }
 
@@ -173,17 +206,22 @@ function buildModelGrid(centerX, centerY, count, wPx, hPx) {
 }
 
 function getBaseAtPoint(group, x, y) {
-  const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
-  const rot = (group.baseRotation || 0) * Math.PI / 180;
-  const rw  = mmToPx(sz.w) / 2;
-  const rh  = mmToPx(sz.h) / 2;
+  const sz    = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
+  const shape = group.shape || sz.shape || 'circle';
+  const rot   = (group.baseRotation || 0) * Math.PI / 180;
+  const rw    = mmToPx(sz.w) / 2;
+  const rh    = mmToPx(sz.h) / 2;
   for (let i = group.bases.length - 1; i >= 0; i--) {
     const b  = group.bases[i];
     const dx = x - b.x, dy = y - b.y;
     // Rotate point into base-local space
     const lx = dx * Math.cos(-rot) - dy * Math.sin(-rot);
     const ly = dx * Math.sin(-rot) + dy * Math.cos(-rot);
-    if ((lx*lx)/(rw*rw) + (ly*ly)/(rh*rh) <= 1) return i;
+    if (shape === 'rectangle') {
+      if (Math.abs(lx) <= rw && Math.abs(ly) <= rh) return i;
+    } else {
+      if ((lx*lx)/(rw*rw) + (ly*ly)/(rh*rh) <= 1) return i;
+    }
   }
   return -1;
 }
@@ -197,24 +235,31 @@ function checkCohesion(group) {
 }
 
 function drawModelGroup(group, isEditing) {
-  const sz  = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
-  const rw  = mmToPx(sz.w) / 2;
-  const rh  = mmToPx(sz.h) / 2;
-  const groupRot = (group.baseRotation || 0) * Math.PI / 180;
+  const sz    = getBaseSize(group.baseSizeKey || String(group.baseSizeMm || 32));
+  const shape = group.shape || sz.shape || 'circle';
+  const rw    = mmToPx(sz.w) / 2;
+  const rh    = mmToPx(sz.h) / 2;
+  const rot   = (group.baseRotation || 0) * Math.PI / 180;
   const inCohesion = group.bases.length <= 1 || checkCohesion(group);
   const ringColor  = inCohesion ? 'rgba(100,220,100,0.7)' : 'rgba(255,80,80,0.8)';
 
   group.bases.forEach((b, i) => {
     const isSelected = isEditing && modelsSelectedBases.has(i);
-    const rot = (b.rot !== undefined) ? b.rot : groupRot;
 
-    // Base fill
     ctx.beginPath();
-    ctx.ellipse(b.x, b.y, rw, rh, rot, 0, Math.PI * 2);
+    if (shape === 'rectangle') {
+      // Rotated rectangle
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(rot);
+      ctx.rect(-rw, -rh, rw * 2, rh * 2);
+      ctx.restore();
+    } else {
+      // Circle or oval — both use ellipse
+      ctx.ellipse(b.x, b.y, rw, rh, rot, 0, Math.PI * 2);
+    }
     ctx.fillStyle = group.color + (isSelected ? 'ff' : 'aa');
     ctx.fill();
-
-    // Base stroke
     ctx.strokeStyle = isSelected ? '#fff' : group.color;
     ctx.lineWidth   = isSelected ? 2.5 : 1.5;
     ctx.stroke();
@@ -269,42 +314,6 @@ function drawModelGroup(group, isEditing) {
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(minX, minY2, maxX - minX, maxY2 - minY2);
     ctx.setLineDash([]);
-
-    // Rotation handle — show on last selected base if group is oval
-    if (isOval(group.baseSizeKey) && modelsSelectedBases.size > 0) {
-      const lastSel = [...modelsSelectedBases].at(-1);
-      const b = group.bases[lastSel];
-      const rot = (b.rot !== undefined) ? b.rot : groupRot;
-      const handleDist = Math.max(rw, rh) + 18;
-      const hx = b.x + Math.cos(rot - Math.PI / 2) * handleDist;
-      const hy = b.y + Math.sin(rot - Math.PI / 2) * handleDist;
-
-      // Stem line
-      ctx.strokeStyle = 'rgba(255,200,0,0.8)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(hx, hy);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Handle circle
-      ctx.beginPath();
-      ctx.arc(hx, hy, 7, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,200,0,0.9)';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Rotation arrow icon inside handle
-      ctx.font = '9px sans-serif';
-      ctx.fillStyle = '#000';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('↻', hx, hy);
-    }
   }
 }
 
@@ -317,7 +326,7 @@ const IPX = 15; // inches to pixels: 1" = 15px
 const canvas = document.getElementById('battlefield');
 const ctx = canvas.getContext('2d');
 
-let currentTool = 'draw';
+let currentTool = 'models';
 let currentColor = '#00ff00';
 let currentMission = null;
 let currentTerrainFormat = 'gw'; // 'gw' | 'wtc' | 'uktc'
@@ -330,6 +339,11 @@ let currentPoints = [];
 let measurePoints = [];
 let drawingHintShown = false;
 let hintElement = null;
+
+// ─── Army List State ──────────────────────────────────────────────────────────
+let importedList     = null;  // { faction, detachment, edition, units[] }
+let stagingUnits     = [];    // units not yet placed on board
+let draggingPill     = null;  // { unit, pillEl } currently being dragged from staging
 
 let selectedUnit = null;
 let isDragging = false;
@@ -379,6 +393,581 @@ function updateHsToggleVisibility() {
   }
 }
 
+// ─── Army List Import ─────────────────────────────────────────────────────────
+
+const CATEGORY_COLORS = {
+  character:  '#e94560',  // red
+  battleline: '#4ecdc4',  // teal
+  vehicle:    '#4e8ccd',  // blue
+  monster:    '#9b59b6',  // purple
+  transport:  '#e67e22',  // orange
+  other:      '#f1c40f',  // yellow
+};
+
+const CATEGORY_HEADERS = new Set([
+  'characters', 'character', 'battleline', 'infantry',
+  'vehicles', 'vehicle', 'monsters', 'monster',
+  'dedicated transports', 'transport', 'fortifications',
+  'allied units', 'other datasheets', 'epic heroes',
+]);
+
+function normalizeFaction(str) {
+  return str.toLowerCase().trim().replace(/\s+/g, '-');
+}
+
+function inferCategory(unitName) {
+  const n = unitName.toLowerCase();
+  if (/lord|captain|lieutenant|master|sorcerer|daemon prince|warlord|hero|prime|tyrant|patriarch|magus|aun\'va|shadowsun/.test(n)) return 'character';
+  if (/squad|warriors|marines|brethren|boys|boyz|troops|cultists|guardsmen|bloodletters|daemonettes|plaguebearers|horrors/.test(n)) return 'battleline';
+  if (/tank|predator|rhino|land raider|transport|razorback|chimera|devilfish|wave serpent|trukk/.test(n)) return 'transport';
+  if (/dreadnought|knight|titan|riptide|morkanaut|gorkanaut|tyrannofex|hive|carnifex|maulerfiend|defiler/.test(n)) return 'monster';
+  if (/vehicle|walker|sentinel|warwalker|helbrute/.test(n)) return 'vehicle';
+  return 'other';
+}
+
+function inferBaseSize(unitName, category) {
+  const n = unitName.toLowerCase();
+  // Vehicles on rectangular bases
+  if (/land raider|land raider crusader|predator|vindicator|rhino|razorback|chimera|leman russ|trukk|devilfish|hammerhead|wave serpent|ghost ark|doomsday ark/.test(n)) return '105x70r';
+  if (/repulsor|impulsor|brutalis|redemptor/.test(n)) return '120x92r';
+  if (/knight|titan|gorkanaut|morkanaut/.test(n)) return '170x105r';
+  // Monsters/large creatures on ovals
+  if (/carnifex|tyrannofex|hive tyrant|tervigon/.test(n)) return '120x92o';
+  if (/dreadnought|riptide|helbrute|defiler|maulerfiend|daemon prince/.test(n)) return '90x52o';
+  if (/obliterator|gravis|terminator|crisis/.test(n)) return '40';
+  // Bikes/cavalry on ovals
+  if (/biker|bike|cavalry|rider|horseman|jetbike/.test(n)) return '75x42o';
+  // Characters
+  if (category === 'character') return '40';
+  // Battleline infantry
+  if (category === 'battleline') return '32';
+  return '32';
+}
+
+// ── New Recruit Short Format parser ──────────────────────────────────────────
+// Line 1: "Faction - SubFaction - Detachment"
+// Units:  "[N]x Unit Name (pts)" or "Unit Name (pts)"
+
+function parseNewRecruit(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return null;
+
+  let faction = 'Unknown', detachment = null, edition = '10th';
+  const units = [];
+
+  // First line: faction/detachment header
+  const headerMatch = lines[0].match(/^(.+?)\s*-\s*(.+?)\s*-\s*(.+)$/);
+  if (headerMatch) {
+    faction    = headerMatch[2].trim();
+    detachment = headerMatch[3].trim();
+  } else {
+    faction = lines[0];
+  }
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    // Skip total points line
+    if (/^total\s*points?/i.test(line) || /^\d+\s*\/\s*\d+\s*pts/i.test(line)) continue;
+
+    // "10x Unit Name (pts)" or "[10]x Unit Name (pts)" or "Unit Name (pts)"
+    const unitMatch = line.match(/^(?:\[?(\d+)\]?x\s+)?(.+?)\s*\((\d+)\s*(?:pts?)?\)$/i);
+    if (unitMatch) {
+      const count    = parseInt(unitMatch[1] || '1');
+      const name     = unitMatch[2].trim();
+      const points   = parseInt(unitMatch[3]);
+      const category = inferCategory(name);
+      units.push({
+        unitId:   crypto.randomUUID(),
+        name,
+        count,
+        points,
+        category,
+        baseSizeKey:     inferBaseSize(name, category),
+        deploymentState: 'staging',
+        warlord:         false,
+        keywords:        [],
+      });
+    }
+  }
+
+  return units.length > 0 ? { faction, detachment, edition, units } : null;
+}
+
+// ── GW App Format parser ──────────────────────────────────────────────────────
+// Line 1: army name, Line 2: faction
+// Category headers to skip, units as "Unit Name (pts)"
+
+function countModelsFromBlock(block) {
+  // Logic: in GW App export, "• Nx Name" = a model entry.
+  // Weapon/wargear lines immediately follow WITHOUT their own leading "•" at the same level,
+  // OR are sub-bullets that come before the next top-level "•".
+  // So: only count entries that start with "•" — the first token after • is the model count.
+  // Then check: does the NEXT "•" entry come before any non-bulleted Nx line?
+  // Simplest reliable rule: split on "•", each segment starts with the model entry.
+  // First line of each segment = "Nx ModelName" — that's the model.
+  // Remaining lines = weapons (ignore).
+
+  const segments = block.split('•').map(s => s.trim()).filter(s => s.length > 0);
+  let total = 0;
+  for (const seg of segments) {
+    // First token pattern: "Nx Something"
+    const m = seg.match(/^(\d+)x\s+(.+?)(?:\s{2,}|$)/);
+    if (m) {
+      total += parseInt(m[1]);
+    }
+  }
+  return total > 0 ? total : 1;
+}
+
+function parseGwApp(text) {
+  const SECTION_HEADERS = [
+    'CHARACTERS', 'BATTLELINE', 'DEDICATED TRANSPORTS', 'OTHER DATASHEETS',
+    'FORTIFICATIONS', 'ALLIED UNITS', 'EPIC HEROES', 'VEHICLES', 'MONSTERS',
+  ];
+
+  const unitBlockRegex = /([A-Za-z][A-Za-z\s'\-]+?)\s*\((\d+)\s*points?\)(.*?)(?=(?:[A-Za-z][A-Za-z\s'\-]+?\s*\(\d+\s*points?\))|$)/gs;
+  const blocks = [...text.matchAll(unitBlockRegex)];
+
+  let faction = 'Unknown', detachment = null;
+  const factionMatch = text.match(/(Grey Knights|Space Marines|Chaos Space Marines|Death Guard|Thousand Sons|World Eaters|Necrons|Tyranids|Orks|T'au Empire|Aeldari|Drukhari|Adeptus Mechanicus|Adeptus Custodes|Adepta Sororitas|Genestealer Cults|Imperial Knights|Chaos Knights|Leagues of Votann|Astra Militarum|Dark Angels|Blood Angels|Space Wolves)/i);
+  if (factionMatch) faction = factionMatch[1];
+
+  const detachMatch = text.match(/(Banishers|Anvil Siege Force|Spearhead Assault|First Brotherhood|Teleport Strike Force|Warpbane Brotherhood)\s*(?:CHARACTERS|BATTLELINE|•)/);
+  if (detachMatch) detachment = detachMatch[1].trim();
+
+  const units = [];
+
+  for (const block of blocks) {
+    const name   = block[1].trim();
+    const points = parseInt(block[2]);
+    const body   = block[3] || '';
+
+    if (/^(strike force|patrol|battalion|vanguard|outrider|spearhead|exported|app version|\d+\s*\/\s*\d+)/i.test(name)) continue;
+    if (SECTION_HEADERS.some(h => name.toUpperCase().includes(h))) continue;
+    if (points > 2000) continue;
+
+    const count    = countModelsFromBlock(body);
+    const category = inferCategory(name);
+
+    units.push({
+      unitId:          crypto.randomUUID(),
+      name,
+      count,
+      points,
+      category,
+      baseSizeKey:     inferBaseSize(name, category),
+      deploymentState: 'staging',
+      warlord:         false,
+      keywords:        [],
+    });
+  }
+
+  return units.length > 0 ? { faction, detachment, edition: '10th', units } : null;
+}
+
+function parseArmyList(text) {
+  const nr = parseNewRecruit(text);
+  if (nr && nr.units.length > 0) return nr;
+  return parseGwApp(text);
+}
+
+// ─── Import Modal ─────────────────────────────────────────────────────────────
+
+function openImportModal() {
+  document.getElementById('importModalOverlay').style.display = 'flex';
+  const ta = document.getElementById('importTextarea');
+  ta.value = '';
+  ta.focus();
+  updateImportLineCount();
+  ta.oninput = updateImportLineCount;
+}
+
+function closeImportModal() {
+  document.getElementById('importModalOverlay').style.display = 'none';
+}
+
+function updateImportLineCount() {
+  const ta    = document.getElementById('importTextarea');
+  const lines = ta.value.split('\n').filter(l => l.trim()).length;
+  document.getElementById('importLineCount').textContent = `${lines} lines · ${ta.value.length} chars`;
+}
+
+function parseAndImport() {
+  const text = document.getElementById('importTextarea').value.trim();
+  if (!text) return;
+
+  const list = parseArmyList(text);
+  if (!list || list.units.length === 0) {
+    document.getElementById('importMeta').textContent = '⚠️ Could not parse list. Try New Recruit (Short) format.';
+    return;
+  }
+
+  closeImportModal();
+  openReviewModal(list);
+}
+
+// ─── Review Modal ─────────────────────────────────────────────────────────────
+
+let pendingList = null;
+
+function buildReviewShapePicker(unit, i) {
+  const td = document.createElement('td');
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'display:flex;gap:3px;align-items:center;';
+  wrapper.dataset.field = 'shape';
+  wrapper.dataset.index = i;
+
+  const sz = getBaseSize(unit.baseSizeKey);
+  const currentShape = unit.shape || sz.shape || 'circle';
+
+  // Only show shapes available for this dimension
+  const dim = unit.baseSizeKey.replace(/[or]$/, '');
+  const availableShapes = [...new Set(
+    BASE_SIZES
+      .filter(b => b.key.replace(/[or]$/, '') === dim || b.key === dim)
+      .map(b => b.shape)
+  )];
+
+  availableShapes.forEach(shape => {
+    const btn = document.createElement('button');
+    btn.className = 'shape-btn' + (shape === currentShape ? ' active' : '');
+    btn.dataset.shape = shape;
+    btn.title = shape.charAt(0).toUpperCase() + shape.slice(1);
+    btn.innerHTML = SHAPE_SVGS[shape];
+    btn.onclick = () => {
+      wrapper.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Update the size dropdown to matching key
+      const match = BASE_SIZES.find(b =>
+        (b.key.replace(/[or]$/, '') === dim || b.key === dim) && b.shape === shape
+      );
+      if (match) {
+        const row = btn.closest('tr');
+        const sel = row?.querySelector('[data-field="baseSizeKey"]');
+        if (sel) sel.value = match.key;
+      }
+    };
+    wrapper.appendChild(btn);
+  });
+
+  td.appendChild(wrapper);
+  return td;
+}
+
+function openReviewModal(list) {
+  pendingList = list;
+  const overlay = document.getElementById('reviewModalOverlay');
+  const tbody   = document.getElementById('reviewTableBody');
+  const title   = document.getElementById('reviewModalTitle');
+
+  title.textContent = `${list.faction}${list.detachment ? ' · ' + list.detachment : ''} — Review Units`;
+  tbody.innerHTML = '';
+
+  // Update header to include Shape column
+  const thead = overlay.querySelector('thead tr');
+  if (thead && thead.children.length === 5) {
+    const th = document.createElement('th');
+    th.textContent = 'Shape';
+    thead.insertBefore(th, thead.children[4]);
+  }
+
+  list.units.forEach((unit, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.index = i;
+
+    // Color dot
+    const tdDot = document.createElement('td');
+    const dot = document.createElement('div');
+    dot.className = 'unit-color-dot';
+    dot.style.backgroundColor = CATEGORY_COLORS[unit.category] || '#aaa';
+    dot.style.margin = '0 auto';
+    tdDot.appendChild(dot);
+
+    // Unit name
+    const tdName = document.createElement('td');
+    tdName.textContent = unit.name;
+    tdName.style.fontSize = '12px';
+
+    // Count input
+    const tdCount = document.createElement('td');
+    const countInput = document.createElement('input');
+    countInput.type  = 'number';
+    countInput.min   = '1';
+    countInput.max   = '30';
+    countInput.value = unit.count;
+    countInput.className = 'review-input';
+    countInput.dataset.field = 'count';
+    countInput.dataset.index = i;
+    tdCount.appendChild(countInput);
+
+    // Base size dropdown — only show sizes, shape handled separately
+    const tdBase = document.createElement('td');
+    const baseSelect = document.createElement('select');
+    baseSelect.className = 'nav-select review-select';
+    baseSelect.dataset.field = 'baseSizeKey';
+    baseSelect.dataset.index = i;
+    // Group by dimension, show unique display labels
+    const seen = new Set();
+    BASE_SIZES.forEach(bs => {
+      const dim = bs.key.replace(/[or]$/, '');
+      if (seen.has(dim)) return;
+      seen.add(dim);
+      const opt = document.createElement('option');
+      opt.value = bs.key; // will be updated by shape picker
+      const dimStr = bs.w === bs.h ? `${bs.w}mm` : `${bs.w}×${bs.h}mm`;
+      opt.textContent = dimStr;
+      const unitDim = unit.baseSizeKey.replace(/[or]$/, '');
+      if (dim === unitDim) opt.selected = true;
+      baseSelect.appendChild(opt);
+    });
+    // When size changes, update shape picker options
+    baseSelect.onchange = () => {
+      const newDim = baseSelect.value.replace(/[or]$/, '');
+      const shapeTd = tr.querySelector('[data-field="shape"]');
+      if (shapeTd) {
+        tr.replaceChild(
+          buildReviewShapePicker({ baseSizeKey: newDim, shape: 'circle' }, i),
+          shapeTd.parentElement || shapeTd
+        );
+      }
+    };
+    tdBase.appendChild(baseSelect);
+
+    // Shape picker
+    const tdShape = buildReviewShapePicker(unit, i);
+
+    // Confidence indicator
+    const tdConf = document.createElement('td');
+    tdConf.style.textAlign = 'center';
+    const uncertain = unit.baseSizeKey === '32' && unit.category !== 'battleline';
+    tdConf.innerHTML = uncertain
+      ? '<span style="color:#f1c40f;font-size:13px;" title="Base size inferred — please verify">?</span>'
+      : '<span style="color:#64dc64;font-size:13px;">✓</span>';
+
+    tr.appendChild(tdDot);
+    tr.appendChild(tdName);
+    tr.appendChild(tdCount);
+    tr.appendChild(tdBase);
+    tr.appendChild(tdShape);
+    tr.appendChild(tdConf);
+    tbody.appendChild(tr);
+  });
+
+  overlay.style.display = 'flex';
+}
+
+function closeReviewModal() {
+  document.getElementById('reviewModalOverlay').style.display = 'none';
+  pendingList = null;
+}
+
+function confirmReview() {
+  if (!pendingList) return;
+
+  document.querySelectorAll('#reviewTableBody tr').forEach(tr => {
+    const i           = parseInt(tr.dataset.index);
+    const countInput  = tr.querySelector('[data-field="count"]');
+    const baseSelect  = tr.querySelector('[data-field="baseSizeKey"]');
+    const shapeActive = tr.querySelector('[data-field="shape"] .shape-btn.active');
+
+    if (countInput) pendingList.units[i].count = parseInt(countInput.value) || 1;
+
+    // Resolve the final baseSizeKey from size dim + active shape
+    if (baseSelect && shapeActive) {
+      const dim   = baseSelect.value.replace(/[or]$/, '');
+      const shape = shapeActive.dataset.shape;
+      const match = BASE_SIZES.find(b =>
+        (b.key.replace(/[or]$/, '') === dim || b.key === dim) && b.shape === shape
+      );
+      if (match) {
+        pendingList.units[i].baseSizeKey = match.key;
+        pendingList.units[i].shape       = match.shape;
+      }
+    } else if (baseSelect) {
+      const match = BASE_SIZES.find(b => b.key === baseSelect.value);
+      if (match) {
+        pendingList.units[i].baseSizeKey = match.key;
+        pendingList.units[i].shape       = match.shape;
+      }
+    }
+  });
+
+  importedList = pendingList;
+  stagingUnits = pendingList.units.map(u => ({ ...u, deploymentState: 'staging' }));
+  localStorage.setItem('tacticaldropz_list', JSON.stringify(importedList));
+
+  document.getElementById('reviewModalOverlay').style.display = 'none';
+  pendingList = null;
+  renderStagingArea();
+}
+
+// ─── Staging Area ─────────────────────────────────────────────────────────────
+
+function renderStagingArea() {
+  const container = document.getElementById('stagingUnits');
+  const hint      = document.getElementById('stagingHint');
+  const clearBtn  = document.getElementById('clearListBtn');
+  container.innerHTML = '';
+
+  if (!importedList || stagingUnits.length === 0) {
+    hint.textContent = 'Import a list to begin — or place units directly on the board';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  const totalPts = importedList.units.reduce((s, u) => s + u.points, 0);
+  hint.textContent = `${importedList.faction}${importedList.detachment ? ' · ' + importedList.detachment : ''} · ${totalPts}pts`;
+  clearBtn.style.display = 'inline-block';
+
+  stagingUnits.forEach(unit => {
+    const pill = document.createElement('div');
+    pill.className = 'staging-pill' + (unit.deploymentState === 'deployed' ? ' deployed' : '');
+    pill.draggable = unit.deploymentState !== 'deployed';
+    pill.dataset.unitId = unit.unitId;
+
+    const color = CATEGORY_COLORS[unit.category] || CATEGORY_COLORS.other;
+
+    const dot = document.createElement('div');
+    dot.className = 'staging-pill-dot';
+    dot.style.backgroundColor = color;
+
+    const name = document.createElement('span');
+    name.className = 'staging-pill-name';
+    name.textContent = unit.name;
+
+    const count = document.createElement('span');
+    count.className = 'staging-pill-count';
+    count.textContent = unit.count > 1 ? `×${unit.count}` : '';
+
+    const base = document.createElement('span');
+    base.className = 'staging-pill-base';
+    base.textContent = unit.baseSizeKey + 'mm';
+
+    pill.appendChild(dot);
+    pill.appendChild(name);
+    if (unit.count > 1) pill.appendChild(count);
+    pill.appendChild(base);
+
+    // Tags
+    if (unit.warlord) {
+      const tag = document.createElement('span');
+      tag.className = 'staging-pill-tag';
+      tag.textContent = 'WL';
+      pill.appendChild(tag);
+    }
+
+    // Drag events
+    if (unit.deploymentState !== 'deployed') {
+      pill.addEventListener('dragstart', e => {
+        draggingPill = unit;
+        pill.classList.add('dragging-pill');
+        e.dataTransfer.effectAllowed = 'move';
+        document.getElementById('canvasWrapper').classList.add('drop-active');
+      });
+      pill.addEventListener('dragend', () => {
+        pill.classList.remove('dragging-pill');
+        draggingPill = null;
+        document.getElementById('canvasWrapper').classList.remove('drop-active');
+      });
+    }
+
+    container.appendChild(pill);
+  });
+}
+
+function setupCanvasDropZone() {
+  const wrapper = document.getElementById('canvasWrapper');
+
+  wrapper.addEventListener('dragover', e => {
+    if (!draggingPill) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+
+  wrapper.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!draggingPill) return;
+
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top)  * scaleY;
+
+    placeUnitFromStaging(draggingPill, x, y);
+    draggingPill = null;
+    document.getElementById('canvasWrapper').classList.remove('drop-active');
+  });
+}
+
+function placeUnitFromStaging(unit, x, y) {
+  const sz    = getBaseSize(unit.baseSizeKey);
+  const shape = unit.shape || sz.shape || 'circle';
+  const count = unit.count;
+  const wPx   = mmToPx(sz.w);
+  const hPx   = mmToPx(sz.h);
+  const bases  = buildModelGrid(x, y, count, wPx, hPx);
+  const color  = CATEGORY_COLORS[unit.category] || currentColor;
+
+  const group = {
+    type:        'modelGroup',
+    label:       unit.name,
+    color,
+    baseSizeKey: unit.baseSizeKey,
+    shape,
+    baseRotation: 0,
+    bases,
+    unitId:      unit.unitId,
+    fromList:    true,
+  };
+
+  drawings.push(group);
+  modelsEditingIndex = drawings.length - 1;
+  modelsSelectedBases = new Set(bases.map((_, i) => i));
+
+  // Auto-switch to models tool so user can immediately drag/edit
+  if (currentTool !== 'models') selectTool('models');
+
+  // Mark as deployed in staging
+  unit.deploymentState = 'deployed';
+  renderStagingArea();
+  drawScene();
+  updateUnitsList();
+}
+
+function returnUnitToStaging(unitId) {
+  const unit = stagingUnits.find(u => u.unitId === unitId);
+  if (unit) {
+    unit.deploymentState = 'staging';
+    renderStagingArea();
+  }
+}
+
+function clearList() {
+  modalConfirm('Clear List', 'Remove the imported list and all placed units from it?', 'Clear', true).then(ok => {
+    if (!ok) return;
+    // Remove all drawings that came from the list
+    drawings = drawings.filter(d => !d.fromList);
+    importedList = null;
+    stagingUnits = [];
+    localStorage.removeItem('tacticaldropz_list');
+    renderStagingArea();
+    drawScene();
+    updateUnitsList();
+  });
+}
+
+function restoreListFromStorage() {
+  try {
+    const saved = localStorage.getItem('tacticaldropz_list');
+    if (saved) {
+      importedList = JSON.parse(saved);
+      stagingUnits = importedList.units.map(u => ({ ...u, deploymentState: 'staging' }));
+      renderStagingArea();
+    }
+  } catch (e) { /* ignore */ }
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function init() {
   await loadDeployments();
@@ -388,6 +977,10 @@ async function init() {
   bindToolbar();
   bindCanvas();
   resizeCanvas();
+  setupCanvasDropZone();
+  restoreListFromStorage();
+  updateShapePicker();
+  selectTool('models');
   drawScene();
 }
 
@@ -634,9 +1227,9 @@ function selectMission(id) {
 }
 
 function selectTool(tool) {
-  // Toggle off if clicking the already-active tool (except draw, which is default)
-  if (currentTool === tool && tool !== 'draw') {
-    tool = 'draw';
+  // Toggle off if clicking the already-active tool (except models, which is default)
+  if (currentTool === tool && tool !== 'models') {
+    tool = 'models';
   }
   currentTool = tool;
   currentPoints = [];
@@ -808,14 +1401,14 @@ function drawUnit(drawing) {
   if (drawing.label) {
     const cx = drawing.points.reduce((s, p) => s + p.x, 0) / drawing.points.length;
     const cy = drawing.points.reduce((s, p) => s + p.y, 0) / drawing.points.length;
-    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    const tw = ctx.measureText(drawing.label).width;
+    ctx.fillRect(cx - tw / 2 - 4, cy - 8, tw + 8, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(drawing.label).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(cx - tw / 2 - 5, cy - 9, tw + 10, 18);
-    ctx.fillStyle = drawing.color;
-    ctx.fillText(drawing.label, cx, cy);
+    ctx.fillText(drawing.label, cx, cy + 1);
   }
 }
 
@@ -926,25 +1519,6 @@ function isPointInUnit(x, y, unit) {
 
 function clipLosToTerrain(start, end) { return end; }
 
-function getRotationHandle(group) {
-  // Returns {x,y,baseIndex} of rotation handle, or null
-  if (!isOval(group.baseSizeKey) || modelsSelectedBases.size === 0) return null;
-  const sz = getBaseSize(group.baseSizeKey);
-  const rw = mmToPx(sz.w) / 2;
-  const rh = mmToPx(sz.h) / 2;
-  const lastSel = [...modelsSelectedBases].at(-1);
-  const b = group.bases[lastSel];
-  const groupRot = (group.baseRotation || 0) * Math.PI / 180;
-  const rot = (b.rot !== undefined) ? b.rot : groupRot;
-  const handleDist = Math.max(rw, rh) + 18;
-  return {
-    x: b.x + Math.cos(rot - Math.PI / 2) * handleDist,
-    y: b.y + Math.sin(rot - Math.PI / 2) * handleDist,
-    baseIndex: lastSel,
-    bx: b.x, by: b.y
-  };
-}
-
 function distToSegment(px, py, ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay;
   const lenSq = dx * dx + dy * dy;
@@ -1037,17 +1611,6 @@ function handleMouseDown(e) {
 }
 
 function handleModelsMouseDown(e, x, y) {
-  // Check rotation handle first (only in edit mode, left click)
-  if (e.button === 0 && modelsEditingIndex !== null) {
-    const group = drawings[modelsEditingIndex];
-    const handle = getRotationHandle(group);
-    if (handle && Math.hypot(x - handle.x, y - handle.y) <= 10) {
-      modelsRotating    = true;
-      modelsRotateAnchor = { x: handle.bx, y: handle.by };
-      modelsRotateStart  = Math.atan2(y - handle.by, x - handle.bx);
-      return;
-    }
-  }
 
   // Right-click in edit mode: remove base
   if (e.button === 2 && modelsEditingIndex !== null) {
@@ -1107,13 +1670,15 @@ function handleModelsMouseDown(e, x, y) {
 function placeModelGroup(x, y) {
   const sizeKey = document.getElementById('baseSize').value;
   const sz      = getBaseSize(sizeKey);
-  const rot     = parseInt(document.getElementById('baseRotation')?.value || '0');
+  const shape   = sz.shape || 'circle';
+  const rot     = (shape === 'oval' || shape === 'rectangle') ? 
+                  parseInt(document.getElementById('baseRotation')?.value || '0') : 0;
   const count   = parseInt(document.getElementById('modelCount').value) || 1;
   const wPx = mmToPx(rot === 90 ? sz.h : sz.w);
   const hPx = mmToPx(rot === 90 ? sz.w : sz.h);
   const bases  = buildModelGrid(x, y, count, wPx, hPx);
   const label  = document.getElementById('unitName').value || 'Unit';
-  const group  = { type: 'modelGroup', label, color: currentColor, baseSizeKey: sizeKey, baseRotation: rot, bases };
+  const group  = { type: 'modelGroup', label, color: currentColor, baseSizeKey: sizeKey, shape, baseRotation: rot, bases };
   drawings.push(group);
   modelsEditingIndex = drawings.length - 1;
   modelsSelectedBases = new Set(bases.map((_, i) => i));
@@ -1132,22 +1697,6 @@ function handleMouseMove(e) {
     const dx = x - dragOffset.x - cx;
     const dy = y - dragOffset.y - cy;
     unit.points.forEach(pt => { pt.x += dx; pt.y += dy; });
-    drawScene();
-    return;
-  }
-
-  // Models rotation drag
-  if (currentTool === 'models' && modelsRotating && modelsEditingIndex !== null) {
-    const currentAngle = Math.atan2(y - modelsRotateAnchor.y, x - modelsRotateAnchor.x);
-    const delta = currentAngle - modelsRotateStart;
-    modelsRotateStart = currentAngle;
-    const group = drawings[modelsEditingIndex];
-    const groupRot = (group.baseRotation || 0) * Math.PI / 180;
-    modelsSelectedBases.forEach(bi => {
-      const b = group.bases[bi];
-      const cur = (b.rot !== undefined) ? b.rot : groupRot;
-      b.rot = cur + delta;
-    });
     drawScene();
     return;
   }
@@ -1214,11 +1763,6 @@ function handleMouseUp() {
     modelsDragStart = null;
     modelsDragging  = false;
   }
-  if (modelsRotating) {
-    modelsRotating     = false;
-    modelsRotateAnchor = null;
-    modelsRotateStart  = null;
-  }
 }
 
 // ─── Units List ───────────────────────────────────────────────────────────────
@@ -1228,7 +1772,7 @@ function updateUnitsList() {
   list.innerHTML = '';
   drawings.forEach((d, i) => {
     if (d.type !== 'unit' && d.type !== 'modelGroup') return;
-      const item = document.createElement('div');
+    const item = document.createElement('div');
     item.className = 'unit-item';
 
     const dot = document.createElement('div');
@@ -1241,6 +1785,12 @@ function updateUnitsList() {
     lbl.style.flex = '1';
     lbl.style.fontSize = '12px';
 
+    // Status badge
+    const badge = document.createElement('span');
+    badge.className = 'unit-status-badge ' + (d.fromList ? 'deployed' : 'manual');
+    badge.textContent = d.fromList ? '✓' : 'M';
+    badge.title = d.fromList ? 'From imported list' : 'Manually placed';
+
     const del = document.createElement('span');
     del.textContent = '🗑️';
     del.className = 'unit-action-btn';
@@ -1250,6 +1800,8 @@ function updateUnitsList() {
       modalConfirm('Delete Unit', `Delete "${d.label || 'Unit'}"?`, 'Delete', true).then(ok => {
         if (ok) {
           if (modelsEditingIndex === i) { modelsEditingIndex = null; modelsSelectedBases.clear(); }
+          // Return to staging if from list
+          if (d.fromList && d.unitId) returnUnitToStaging(d.unitId);
           drawings.splice(i, 1);
           drawScene();
           updateUnitsList();
@@ -1259,6 +1811,7 @@ function updateUnitsList() {
 
     item.appendChild(dot);
     item.appendChild(lbl);
+    item.appendChild(badge);
     item.appendChild(del);
     item.onclick = ev => {
       if (ev.target === del) return;
@@ -1344,8 +1897,12 @@ function loadPlan() {
 
 // ─── Clear ────────────────────────────────────────────────────────────────────
 function clearCanvas() {
-  modalConfirm('Clear Board', 'Remove all drawings from the board?', 'Clear', true).then(ok => {
+  modalConfirm('Clear Board', 'Remove all drawings from the board? Imported list units will return to staging.', 'Clear', true).then(ok => {
     if (ok) {
+      // Return all list units to staging
+      drawings.forEach(d => {
+        if (d.fromList && d.unitId) returnUnitToStaging(d.unitId);
+      });
       drawings = [];
       currentPoints = [];
       measurePoints = [];
