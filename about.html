@@ -5,152 +5,247 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About & Help – TacticalDropz</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .help-content { max-width:860px; padding:32px 36px; line-height:1.7; color:#ccc; }
+    .help-content h2 { color:#e94560; font-size:18px; font-weight:700; margin:40px 0 12px; padding-bottom:8px; border-bottom:1px solid rgba(233,69,96,0.2); letter-spacing:0.3px; }
+    .help-content h2:first-child { margin-top:0; }
+    .help-content h3 { color:#fff; font-size:14px; font-weight:600; margin:24px 0 8px; }
+    .help-content p { margin-bottom:12px; font-size:13px; }
+    .help-content ul { padding-left:20px; margin-bottom:16px; font-size:13px; }
+    .help-content li { margin-bottom:5px; }
+    .help-content strong { color:#fff; }
+    .help-content a { color:#4ecdc4; }
+    .key { display:inline-block; background:#0f3460; border:1px solid #1a508b; border-radius:3px; padding:1px 7px; font-family:monospace; font-size:12px; color:#4ecdc4; margin:0 2px; }
+    .badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:11px; font-weight:600; margin-left:6px; vertical-align:middle; }
+    .badge-new { background:rgba(78,205,196,0.15); color:#4ecdc4; border:1px solid rgba(78,205,196,0.3); }
+    .tip { background:rgba(78,205,196,0.07); border-left:3px solid #4ecdc4; padding:10px 14px; border-radius:0 4px 4px 0; margin:12px 0; font-size:12px; color:#aaa; }
+    .workflow-step { display:flex; gap:14px; margin-bottom:14px; align-items:flex-start; }
+    .step-num { width:24px; height:24px; border-radius:50%; background:#e94560; color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+    .step-body { font-size:13px; }
+    .step-body strong { color:#fff; }
+    hr.section-rule { border:none; border-top:1px solid rgba(255,255,255,0.07); margin:36px 0; }
+    .color-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+    .free-vs-pro { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+    .tier-box { background:rgba(255,255,255,0.03); border:1px solid #1a508b; border-radius:6px; padding:16px; }
+    .tier-box.pro { border-color:rgba(233,69,96,0.4); }
+    .tier-box h4 { font-size:13px; font-weight:700; margin-bottom:10px; color:#fff; }
+    .tier-box ul { margin:0; padding-left:16px; }
+  </style>
 </head>
-
 <body>
   <div class="banner">
-    <div class="banner-text">
-      TacticalDropz — Warhammer 40K Deployment Planning Tool
-    </div>
+    <div class="banner-text">TacticalDropz — Warhammer 40K Deployment Planning Tool</div>
   </div>
-
   <div class="container">
-
-    <!-- Reuse top-nav styling -->
     <div class="top-nav">
-      <a href="index.html" class="nav-link">⚔️ Planner</a>
-      <a class="nav-link" style="background:#e94560; border-color:#e94560; color:#fff; cursor:default;">About &amp; Help</a>
+      <a href="index.html" class="nav-link">← Planner</a>
+      <span class="nav-title" style="margin-left:8px;">About & Help</span>
     </div>
-
-    <!-- Main content area -->
     <div class="main-content">
       <div class="canvas-area" style="overflow-y:auto;">
+        <div class="canvas-wrapper" style="align-items:flex-start; justify-content:flex-start; overflow-y:auto; height:100%;">
+          <div class="help-content">
 
-        <!-- Use toolbar as header container -->
-        <div class="toolbar">
-          <div class="toolbar-section">
-            <span class="mode-label">About &amp; Help — TacticalDropz</span>
+            <h2>What is TacticalDropz?</h2>
+            <p>TacticalDropz is a browser-based planning tool for visualizing Warhammer 40K deployments before you get to the table. Import your army list, drag units onto the board, check cohesion, measure distances, and plan your deployment against real mission layouts — all without paper or screenshots.</p>
+
+            <hr class="section-rule">
+
+            <h2>Free vs Pro</h2>
+            <div class="free-vs-pro">
+              <div class="tier-box">
+                <h4>🆓 Free — no account needed</h4>
+                <ul>
+                  <li>Full board with all tools</li>
+                  <li>All missions &amp; terrain formats</li>
+                  <li>Army list import</li>
+                  <li>Staging area &amp; drag-to-board</li>
+                  <li>WTC image overlays</li>
+                  <li>Works fully within a session</li>
+                  <li>Resets on page refresh</li>
+                </ul>
+              </div>
+              <div class="tier-box pro">
+                <h4>⚡ Pro — $5/month</h4>
+                <ul>
+                  <li>Everything in Free</li>
+                  <li>Saved deployments</li>
+                  <li>Saved army lists</li>
+                  <li>Load previous sessions</li>
+                  <li>Custom themes</li>
+                  <li>More features coming</li>
+                </ul>
+              </div>
+            </div>
+
+            <hr class="section-rule">
+
+            <h2>Typical Workflow</h2>
+            <div class="workflow-step">
+              <div class="step-num">1</div>
+              <div class="step-body"><strong>Select your mission</strong> — pick from the left sidebar, set terrain format (GW or WTC) and layout in the top nav.</div>
+            </div>
+            <div class="workflow-step">
+              <div class="step-num">2</div>
+              <div class="step-body"><strong>Import your army list</strong> — click <strong>📋 Import List</strong> in the staging area. Paste from the GW App or New Recruit. Review counts and base sizes in the review modal.</div>
+            </div>
+            <div class="workflow-step">
+              <div class="step-num">3</div>
+              <div class="step-body"><strong>Drag units to the board</strong> — drag unit pills from the staging area and drop them onto the board. Units are placed as correctly-sized model bases.</div>
+            </div>
+            <div class="workflow-step">
+              <div class="step-num">4</div>
+              <div class="step-body"><strong>Adjust positions</strong> — click a base to enter edit mode, drag to reposition, rotate ovals and rectangles with the <strong>↻</strong> handle.</div>
+            </div>
+            <div class="workflow-step">
+              <div class="step-num">5</div>
+              <div class="step-body"><strong>Save or export</strong> — Pro users save to cloud. Free users can download a JSON snapshot with Save Plan.</div>
+            </div>
+
+            <hr class="section-rule">
+
+            <h2>📦 Staging Area</h2>
+            <p>The staging area sits between the toolbar and the board. It shows all units from your imported list as draggable pills.</p>
+            <ul>
+              <li>Each pill shows unit name, model count, base size, and a color dot by category</li>
+              <li><span class="color-dot" style="background:#e94560;"></span><strong>Red</strong> = Characters &nbsp;&nbsp; <span class="color-dot" style="background:#4ecdc4;"></span><strong>Teal</strong> = Battleline &nbsp;&nbsp; <span class="color-dot" style="background:#4e8ccd;"></span><strong>Blue</strong> = Vehicles &nbsp;&nbsp; <span class="color-dot" style="background:#9b59b6;"></span><strong>Purple</strong> = Monsters &nbsp;&nbsp; <span class="color-dot" style="background:#e67e22;"></span><strong>Orange</strong> = Transports</li>
+              <li>Deployed units grey out with a dashed border — drag again to reposition on the board</li>
+              <li>Deleting a unit from the board returns it to staging automatically</li>
+              <li><strong>Clear Board</strong> — removes all drawings, returns list units to staging (list stays intact)</li>
+              <li><strong>Clear List</strong> — removes the imported list entirely and clears all list-placed units</li>
+            </ul>
+            <div class="tip">💡 You can mix imported units with hand-placed units. Right panel shows a green <strong>✓</strong> for list units and yellow <strong>M</strong> for manually placed ones.</div>
+
+            <hr class="section-rule">
+
+            <h2>📋 List Import</h2>
+            <p>TacticalDropz supports two list formats:</p>
+
+            <h3>GW App (Official App export)</h3>
+            <p>Copy your list from the GW App and paste it directly. The parser extracts unit names, counts models by counting bullet points (not weapons), and auto-infers base sizes. Works even when the app exports everything as a single long line.</p>
+
+            <h3>New Recruit — Short format (recommended)</h3>
+            <p>Uses the pattern <code style="color:#4ecdc4;font-size:12px;">10x Unit Name (pts)</code>. Model counts are read directly from the <code style="color:#4ecdc4;font-size:12px;">Nx</code> prefix — most reliable format.</p>
+
+            <h3>Review Modal</h3>
+            <p>After pasting, a review modal shows every parsed unit with editable count, shape picker, and filtered size dropdown. Correct anything before units hit staging.</p>
+            <ul>
+              <li>Select shape first — <strong>○</strong> circle, <strong>⬭</strong> oval, <strong>▭</strong> rectangle — then pick the dimension from the filtered list</li>
+              <li><span style="color:#64dc64">✓</span> = base size confident &nbsp;&nbsp; <span style="color:#f1c40f">?</span> = inferred, please verify</li>
+            </ul>
+
+            <hr class="section-rule">
+
+            <h2>🪖 Place Models Tool</h2>
+            <p>The default tool. Place and arrange model bases directly on the board.</p>
+
+            <h3>Toolbar controls</h3>
+            <ul>
+              <li><strong>Shape picker</strong> — select ○ circle, ⬭ oval, or ▭ rectangle first. The size dropdown filters to matching options only.</li>
+              <li><strong>Size dropdown</strong> — filtered by selected shape</li>
+              <li><strong>Count</strong> — quick buttons (1, 5, 10) or type a number</li>
+              <li><strong>Unit name</strong> — label shown above the placed group on the board</li>
+            </ul>
+
+            <h3>Placing a group</h3>
+            <ul>
+              <li><span class="key">Click</span> empty space — drops a new group at that position</li>
+            </ul>
+
+            <h3>Selecting & moving</h3>
+            <ul>
+              <li><span class="key">Click</span> a base — enters edit mode and selects that base</li>
+              <li><span class="key">Ctrl + Click</span> — add or remove a base from the current selection</li>
+              <li><span class="key">Drag</span> a selected base — moves all selected bases together</li>
+              <li><span class="key">Click</span> empty space — deselects and exits edit mode</li>
+            </ul>
+
+            <h3>Rotating ovals & rectangles</h3>
+            <ul>
+              <li>Select an oval or rectangle base — a yellow <strong>↻</strong> handle appears above it connected by a dashed line</li>
+              <li><span class="key">Drag</span> the handle to rotate freely in any direction</li>
+              <li>With multiple bases selected, dragging the handle rotates all selected bases simultaneously</li>
+              <li>Each base stores its own independent rotation — individual bases in a squad can face different directions</li>
+            </ul>
+
+            <h3>Editing a group</h3>
+            <ul>
+              <li><span class="key">Right click</span> a base in edit mode — removes that individual base from the group</li>
+              <li>Click a unit's name in the right panel — rename it</li>
+              <li>Click 🗑️ in the right panel — delete the whole group (returns to staging if from an imported list)</li>
+            </ul>
+
+            <h3>Cohesion</h3>
+            <ul>
+              <li><span style="color:#64dc64">■</span> <strong>Green</strong> dashed lines = all bases within 2" cohesion</li>
+              <li><span style="color:#ff5050">■</span> <strong>Red</strong> dashed lines = one or more bases out of cohesion</li>
+            </ul>
+
+            <hr class="section-rule">
+
+            <h2>Other Tools</h2>
+
+            <h3>✏️ Draw Unit</h3>
+            <ul>
+              <li><span class="key">Click</span> — add a point to outline a unit zone</li>
+              <li><span class="key">Right click</span> — undo the last placed point</li>
+              <li><span class="key">Double click</span> — close the shape and finish</li>
+              <li><span class="key">Drag</span> inside a finished shape — move it around the board</li>
+            </ul>
+
+            <h3>📏 Measure</h3>
+            <ul>
+              <li><span class="key">Click</span> — set the start point, then click again to set the end — distance shown in inches</li>
+              <li><span class="key">Right click</span> a measurement line — delete it</li>
+            </ul>
+
+            <h3>👁️ Line of Sight</h3>
+            <ul>
+              <li><span class="key">Click</span> — set origin point, then click to set target</li>
+              <li><span class="key">Right click</span> a sight line — delete it</li>
+            </ul>
+
+            <h3>🏷️ Label</h3>
+            <ul>
+              <li><span class="key">Click</span> anywhere on the board — places a text label (prompts for text)</li>
+              <li><span class="key">Right click</span> a label — delete it</li>
+            </ul>
+
+            <hr class="section-rule">
+
+            <h2>Terrain & Missions</h2>
+
+            <h3>Terrain formats</h3>
+            <ul>
+              <li><strong>GW</strong> — Standard GW terrain with 8 layout configurations</li>
+              <li><strong>WTC</strong> — Full WTC map images overlaid on the board for all 6 missions</li>
+              <li><strong>UKTC</strong> — Coming soon</li>
+            </ul>
+
+            <h3>WTC — Hidden Supplies</h3>
+            <p>When WTC terrain and Hammer &amp; Anvil are both selected, a <strong>Hidden Supplies</strong> toggle appears in the top nav to switch to the Hidden Supplies variant of that layout.</p>
+
+            <hr class="section-rule">
+
+            <h2>💾 Save & Load</h2>
+            <ul>
+              <li><strong>Save Plan</strong> — downloads your board state as a JSON file</li>
+              <li><strong>Load Plan</strong> — restores a previously saved board from a JSON file</li>
+              <li><strong>Clear Board</strong> — resets all drawings, returns list units to staging</li>
+              <li>Your imported army list persists automatically across page refreshes (free users, same browser)</li>
+            </ul>
+            <div class="tip">💡 Pro users get cloud save — deployments are stored to your account and accessible from any device or browser.</div>
+
+            <hr class="section-rule">
+
+            <h2>Feedback</h2>
+            <p>TacticalDropz is actively developed. If something doesn't work, looks wrong, or you have a feature idea — feedback is genuinely appreciated and shapes what gets built next.</p>
+            <a href="mailto:nwimmer123@yahoo.com?subject=TacticalDropz Feedback" class="feedback-link">📧 Send feedback</a>
+
           </div>
         </div>
-
-        <div class="canvas-wrapper" style="align-items:flex-start; justify-content:flex-start; overflow-y:auto; height:100%;">
-          <div style="max-width:900px; padding:30px;">
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">What it is</h2>
-              <p>
-                TacticalDropz is a browser-based planning tool for visualizing
-                Warhammer 40K deployments, terrain layouts, and objectives before
-                you get to the table.
-              </p>
-            </section>
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">Why it exists</h2>
-              <p>
-                Tournament preparation often involves rough sketches, scattered notes,
-                and last-minute guesswork. TacticalDropz exists to make that process
-                faster, clearer, and easier to iterate — without paper or screenshots.
-              </p>
-            </section>
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">Who it’s for</h2>
-              <ul style="padding-left:20px;">
-                <li>Warhammer 40K players preparing for tournaments or leagues</li>
-                <li>Players who prefer visual planning over written notes</li>
-                <li>Groups discussing deployments and terrain layouts together</li>
-              </ul>
-            </section>
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">What it’s not</h2>
-              <ul style="padding-left:20px;">
-                <li>A rules reference</li>
-                <li>An army list builder</li>
-                <li>A replacement for playing games on the table</li>
-              </ul>
-            </section>
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">Status</h2>
-              <p>
-                TacticalDropz is an active side project and continues to evolve based
-                on real player feedback. Features and layouts may change over time.
-              </p>
-            </section>
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:10px;">Feedback</h2>
-              <p style="margin-bottom:12px;">
-                If you've used TacticalDropz and have thoughts — good or bad — feedback
-                is welcome and appreciated.
-              </p>
-              <a href="/cdn-cgi/l/email-protection#48263f2125252d3a797a7b083129202727662b2725773b3d2a222d2b3c751c292b3c212b29240c3a273832680e2d2d2c2a292b23" class="feedback-link">
-                📧 Send feedback
-              </a>
-            </section>
-
-            <hr style="border-color:rgba(255,255,255,0.1); margin:40px 0;">
-
-            <section style="margin-bottom:32px;">
-              <h2 style="color:#e94560; margin-bottom:20px;">How to Use</h2>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">Getting started</h3>
-              <p style="margin-bottom:20px;">Select your terrain format (GW, WTC, or UKTC) and a mission from the left sidebar.
-              The board updates with the correct deployment zones and objectives.
-              Use the layout dropdown in the top nav to cycle through terrain layouts.</p>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">🖊️ Draw Tool</h3>
-              <p style="margin-bottom:6px;">Click to place points and outline a unit on the board.</p>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li><strong>Left click</strong> — add a point</li>
-                <li><strong>Right click</strong> — undo last point</li>
-                <li><strong>Double click</strong> — close and finish the shape</li>
-                <li><strong>Drag</strong> inside a finished shape — move it</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">📏 Measure Tool</h3>
-              <p style="margin-bottom:6px;">Click two points to measure distance in inches.</p>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li><strong>Left click</strong> — set start, then end point</li>
-                <li><strong>Right click</strong> on a line — delete it</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">👁️ Line of Sight Tool</h3>
-              <p style="margin-bottom:6px;">Draw a line of sight check between two points.</p>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li><strong>Left click</strong> — set origin, then target</li>
-                <li><strong>Right click</strong> on a line — delete it</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">🪧 Label Tool</h3>
-              <p style="margin-bottom:6px;">Place a text label anywhere on the board.</p>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li><strong>Left click</strong> — place label (prompts for text)</li>
-                <li><strong>Right click</strong> on a label — delete it</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">🪖 Place Models Tool</h3>
-              <p style="margin-bottom:6px;">Place model bases on the board with live cohesion checking.</p>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li>Select base size and model count in the toolbar first</li>
-                <li><strong>Left click</strong> empty space — drop a group</li>
-                <li><strong>Left click</strong> a base — select it (enters edit mode)</li>
-                <li><strong>Ctrl + click</strong> — add/remove a base from selection</li>
-                <li><strong>Drag</strong> a selected base — move the whole selection</li>
-                <li><strong>Right click</strong> a base in edit mode — remove it</li>
-                <li><strong>Left click</strong> empty space in edit mode — exit edit mode</li>
-                <li>Cohesion lines show <span style="color:#64dc64">green</span> when within 2&quot; or <span style="color:#ff5050">red</span> when out of coherency</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">💾 Save / Load / Clear</h3>
-              <ul style="padding-left:20px; margin-bottom:20px; line-height:1.9;">
-                <li><strong>Save Plan</strong> — downloads your board as a JSON file</li>
-                <li><strong>Load Plan</strong> — restores a previously saved board</li>
-                <li><strong>Clear</strong> — resets the board</li>
-              </ul>
-
-              <h3 style="color:#ccc; margin-bottom:8px;">WTC — Hidden Supplies</h3>
-              <p>When WTC terrain and Hammer &amp; Anvil are selected, a <strong>Hidden Supplies</strong>
-              toggle appears in the top nav to switch to the Hidden Supplies variant of that layout.<
+      </div>
+    </div>
+  </div>
+</body>
+</html>

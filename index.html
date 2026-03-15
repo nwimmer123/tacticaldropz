@@ -53,27 +53,8 @@
           <div class="toolbar-section" id="placeModelsSection">
             <button class="tool-btn active" data-tool="models">🪖 Place Models</button>
             <button class="tool-btn tool-btn-info" onclick="showModelsHelp()" title="How to use Place Models">ⓘ</button>
-            <select id="baseSize" class="nav-select" style="width:100px;" onchange="updateShapePicker()">
-              <option value="25">25mm</option>
-              <option value="28">28mm</option>
-              <option value="32" selected>32mm</option>
-              <option value="40">40mm</option>
-              <option value="50">50mm</option>
-              <option value="60">60mm</option>
-              <option value="70">70mm</option>
-              <option value="75x42o">75×42mm</option>
-              <option value="80">80mm</option>
-              <option value="90">90mm</option>
-              <option value="90x52o">90×52mm</option>
-              <option value="100">100mm</option>
-              <option value="105x70o">105×70mm</option>
-              <option value="120x92o">120×92mm</option>
-              <option value="130">130mm</option>
-              <option value="150x95o">150×95mm</option>
-              <option value="160">160mm</option>
-              <option value="170x105o">170×105mm</option>
-            </select>
             <div id="shapePicker" class="shape-picker"></div>
+            <select id="baseSize" class="nav-select" style="width:100px;"></select>
             <div class="model-count-group">
               <button class="count-btn" onclick="setModelCount(1)">1</button>
               <button class="count-btn" onclick="setModelCount(5)">5</button>
