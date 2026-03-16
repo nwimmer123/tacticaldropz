@@ -265,7 +265,7 @@ function modalAlert(title, body) {
 
 function showModelsHelp() {
   showModal({
-    title: '🪖 Place Models — How to Use',
+    title: '🎯 Place Models — How to Use',
     body: `
       <h4>Placing a group</h4>
       <ul>
@@ -1558,7 +1558,7 @@ function selectTool(tool) {
   if (btn) btn.classList.add('active');
   // Show hint for models tool
   if (tool === 'models') {
-    showDrawingHint('🪖 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
+    showDrawingHint('🎯 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
   }
   drawScene();
 }
@@ -2210,7 +2210,7 @@ function hideDrawingHint() {
 function updateHintForTool() {
   hideDrawingHint();
   if (currentTool === 'models') {
-    showDrawingHint('🪖 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
+    showDrawingHint('🎯 Click to place models · Click base to select · Ctrl+click multi-select · Drag to move');
   }
 }
 
