@@ -17,6 +17,10 @@ Globals:
         USER_POOL_CLIENT_ID: !Ref UserPoolClient
         PROMO_CODES_TABLE: !Ref PromoCodesTable
         SES_FROM_EMAIL: "noreply@tacticaldropz.com"
+        APP_URL: "https://tacticaldropz.com"
+        STRIPE_SECRET_KEY: !Sub "{{resolve:ssm:/tacticaldropz/stripe/secret_key}}"
+        STRIPE_WEBHOOK_SECRET: !Sub "{{resolve:ssm:/tacticaldropz/stripe/webhook_secret}}"
+        STRIPE_PRICE_LOOKUP_KEY: "TacticalDropzPro-c005ef8"
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -399,6 +403,46 @@ Resources:
             RestApiId: !Ref ApiGateway
             Auth:
               Authorizer: CognitoAuthorizer
+
+  StripeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/stripe/
+      Handler: index.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tacticaldropz/stripe/*"
+      Events:
+        CreateCheckout:
+          Type: Api
+          Properties:
+            Path: /stripe/create-checkout
+            Method: post
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CreatePortal:
+          Type: Api
+          Properties:
+            Path: /stripe/create-portal
+            Method: post
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: CognitoAuthorizer
+        Webhook:
+          Type: Api
+          Properties:
+            Path: /stripe/webhook
+            Method: post
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: NONE
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 
