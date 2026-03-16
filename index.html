@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TacticalDropz – 40K Deployment Planner</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -105,21 +106,25 @@
       <div id="authError" class="auth-error" style="display:none"></div>
 
       <div id="loginForm">
+        <form onsubmit="submitLogin(); return false;">
         <label class="auth-label">Email</label>
-        <input type="email" id="loginEmail" class="auth-input" placeholder="your@email.com">
+        <input type="email" id="loginEmail" class="auth-input" placeholder="your@email.com" autocomplete="email">
         <label class="auth-label">Password</label>
-        <input type="password" id="loginPassword" class="auth-input" placeholder="Password">
-        <button class="modal-btn modal-btn-primary auth-submit" onclick="submitLogin()">Log In</button>
+        <input type="password" id="loginPassword" class="auth-input" placeholder="Password" autocomplete="current-password">
+        <button type="submit" class="modal-btn modal-btn-primary auth-submit">Log In</button>
         <div class="auth-footer">Free to use · No credit card required</div>
+        </form>
       </div>
 
       <div id="signupForm" style="display:none">
+        <form onsubmit="submitSignup(); return false;">
         <label class="auth-label">Email</label>
-        <input type="email" id="signupEmail" class="auth-input" placeholder="your@email.com">
+        <input type="email" id="signupEmail" class="auth-input" placeholder="your@email.com" autocomplete="email">
         <label class="auth-label">Password <span class="auth-hint">8+ chars, upper, lower, number</span></label>
-        <input type="password" id="signupPassword" class="auth-input" placeholder="Password">
-        <button class="modal-btn modal-btn-primary auth-submit" onclick="submitSignup()">Create Account</button>
+        <input type="password" id="signupPassword" class="auth-input" placeholder="Password" autocomplete="new-password">
+        <button type="submit" class="modal-btn modal-btn-primary auth-submit">Create Account</button>
         <div class="auth-footer">Free to use · No credit card required</div>
+        </form>
       </div>
 
       <div id="verifyForm" style="display:none">
