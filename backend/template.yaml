@@ -194,6 +194,12 @@ Resources:
             Path: /users/verify
             Method: post
             RestApiId: !Ref ApiGateway
+        ForgotPassword:
+          Type: Api
+          Properties:
+            Path: /users/forgot-password
+            Method: post
+            RestApiId: !Ref ApiGateway
         SignIn:
           Type: Api
           Properties:

@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { randomUUID } from 'crypto';
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -25,6 +25,20 @@ export const handler = async (event) => {
   const body   = event.body ? JSON.parse(event.body) : {};
 
   try {
+
+    // ── POST /users/forgot-password ────────────────────────────────────────
+    if (method === 'POST' && path.endsWith('/forgot-password')) {
+      const { email } = body;
+      if (!email) return response(400, { error: 'Email required' });
+
+      await cognito.send(new ForgotPasswordCommand({
+        ClientId: CLIENT_ID,
+        Username: email,
+      }));
+
+      // Always return success to avoid user enumeration
+      return response(200, { message: 'If that email exists, a reset code has been sent.' });
+    }
 
     // ── POST /users/verify ──────────────────────────────────────────────────
     if (method === 'POST' && path.endsWith('/verify')) {

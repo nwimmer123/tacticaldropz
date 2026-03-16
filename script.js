@@ -93,14 +93,35 @@ async function submitLogin() {
     await loadCurrentUser();
     closeAuthModal();
     updateNavAuth();
-    // Check if redirected back from Stripe success
     if (window.location.search.includes('subscribed=true')) {
-      await loadCurrentUser(); // refresh to get pro status
+      await loadCurrentUser();
       updateNavAuth();
       window.history.replaceState({}, '', '/');
     }
   } catch (e) {
-    showAuthError(e.message);
+    const msg = e.message || '';
+    if (msg.includes('UserNotFoundException') || msg.includes('User does not exist') || msg.includes('user does not exist')) {
+      showAuthError('No account found with that email address.');
+    } else if (msg.includes('NotAuthorizedException') || msg.includes('Invalid email or password') || msg.includes('Incorrect username or password')) {
+      showAuthError(`Incorrect password. <a href="#" onclick="sendPasswordReset(event)" style="color:#4ecdc4">Reset password?</a>`);
+    } else if (msg.includes('UserNotConfirmedException') || msg.includes('verify')) {
+      showAuthError('Please verify your email before logging in. Check your inbox.');
+    } else {
+      showAuthError('Login failed. Please try again.');
+    }
+  }
+}
+
+async function sendPasswordReset(e) {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email) return showAuthError('Enter your email address above first.');
+  try {
+    await apiCall('POST', '/users/forgot-password', { email });
+    showAuthError('✅ Password reset email sent. Check your inbox.');
+    document.getElementById('authError').style.color = '#64dc64';
+  } catch (err) {
+    showAuthError('Could not send reset email. Please try again.');
   }
 }
 
@@ -141,7 +162,19 @@ async function submitVerify() {
 
 async function goPro() {
   if (!isLoggedIn()) {
-    openAuthModal('signup');
+    // Show a dedicated Go Pro modal — not the generic auth modal
+    const result = await showModal({
+      title: '⚡ Go Pro — $5/month',
+      body: `<p style="margin-bottom:12px;">Save deployments, store army lists, and unlock all Pro features.</p>
+             <p>Create a free account to get started — no credit card required until you subscribe.</p>`,
+      buttons: [
+        { label: 'Log In',    style: 'modal-btn-secondary', value: 'login'  },
+        { label: 'Sign Up',   style: 'modal-btn-primary',   value: 'signup' },
+        { label: 'Cancel',    style: 'modal-btn-secondary', value: null     },
+      ]
+    });
+    if (result === 'login')  openAuthModal('login');
+    if (result === 'signup') openAuthModal('signup');
     return;
   }
   try {
@@ -1319,6 +1352,11 @@ function buildNav() {
   hsWrapper.appendChild(hsLbl);
   nav.appendChild(hsWrapper);
 
+  // Divider before About
+  const divider0 = document.createElement('div');
+  divider0.className = 'nav-divider';
+  nav.appendChild(divider0);
+
   // About link
   const about = document.createElement('a');
   about.href = 'about.html';
@@ -1326,12 +1364,22 @@ function buildNav() {
   about.textContent = 'About';
   nav.appendChild(about);
 
+  // Spacer before auth area
+  const spacer2 = document.createElement('div');
+  spacer2.className = 'nav-divider';
+  nav.appendChild(spacer2);
+
   // Feedback link
   const feedback = document.createElement('a');
   feedback.href = 'mailto:nwimmer123@yahoo.com?subject=TacticalDropz Feedback';
   feedback.className = 'nav-link';
   feedback.textContent = '📧 Feedback';
   nav.appendChild(feedback);
+
+  // Divider before auth
+  const divider = document.createElement('div');
+  divider.className = 'nav-divider';
+  nav.appendChild(divider);
 
   // Auth buttons placeholder — filled by updateNavAuth()
   const authArea = document.createElement('div');
@@ -1347,7 +1395,7 @@ function updateNavAuth() {
   area.innerHTML = '';
 
   if (!isLoggedIn()) {
-    // Logged out — show Login + Sign Up + Go Pro
+    // Logged out — Login + Sign Up + Go Pro
     const loginBtn = document.createElement('button');
     loginBtn.className = 'nav-btn nav-btn-login';
     loginBtn.textContent = 'Log In';
@@ -1366,22 +1414,24 @@ function updateNavAuth() {
     area.appendChild(loginBtn);
     area.appendChild(signupBtn);
     area.appendChild(proBtn);
+
   } else if (!isPro()) {
-    // Logged in, free tier
-    const pill = document.createElement('div');
-    pill.className = 'nav-user-pill';
-    pill.textContent = currentUser.email;
-    pill.onclick = () => modalConfirm('Account', `Logged in as ${currentUser.email}\nSubscription: Free`, 'Log Out', false).then(ok => { if (ok) logout(); });
+    // Logged in free — show email + Go Pro
+    const emailSpan = document.createElement('span');
+    emailSpan.className = 'nav-user-email';
+    emailSpan.textContent = currentUser.email;
+    emailSpan.onclick = () => modalConfirm('Account', `Logged in as ${currentUser.email}`, 'Log Out', false).then(ok => { if (ok) logout(); });
 
     const proBtn = document.createElement('button');
     proBtn.className = 'nav-btn nav-btn-pro';
-    proBtn.textContent = '⚡ Go Pro';
+    proBtn.textContent = '⚡ Go Pro — $5/mo';
     proBtn.onclick = goPro;
 
-    area.appendChild(pill);
+    area.appendChild(emailSpan);
     area.appendChild(proBtn);
+
   } else {
-    // Logged in, Pro
+    // Pro user — email + PRO badge, click for account menu
     const pill = document.createElement('div');
     pill.className = 'nav-user-pill';
 
@@ -1395,7 +1445,9 @@ function updateNavAuth() {
     pill.appendChild(emailSpan);
     pill.appendChild(badge);
     pill.onclick = () => {
-      showModal({ title: 'Account', body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: <strong style="color:#64dc64">Pro ⚡</strong></p>`,
+      showModal({
+        title: 'Account',
+        body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: <strong style="color:#64dc64">Pro ⚡</strong></p>`,
         buttons: [
           { label: 'Manage Billing', style: 'modal-btn-secondary', value: 'billing' },
           { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout'  },
