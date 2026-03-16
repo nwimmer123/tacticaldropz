@@ -1,14 +1,38 @@
 import Stripe from 'stripe';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const dynamo    = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ssmClient = new SSMClient({});
 
-const USERS_TABLE     = process.env.USERS_TABLE;
-const APP_URL         = process.env.APP_URL || 'https://tacticaldropz.com';
-const WEBHOOK_SECRET  = process.env.STRIPE_WEBHOOK_SECRET;
-const PRICE_LOOKUP    = process.env.STRIPE_PRICE_LOOKUP_KEY || 'TacticalDropzPro-c005ef8';
+const USERS_TABLE  = process.env.USERS_TABLE;
+const APP_URL      = process.env.APP_URL || 'https://tacticaldropz.com';
+const PRICE_LOOKUP = process.env.STRIPE_PRICE_LOOKUP_KEY || 'TacticalDropzPro-c005ef8';
+
+// Cache secrets in memory for Lambda warm invocations
+let _stripe = null;
+let _webhookSecret = null;
+
+async function getStripe() {
+  if (_stripe) return _stripe;
+  const result = await ssmClient.send(new GetParameterCommand({
+    Name: '/tacticaldropz/stripe/secret_key',
+    WithDecryption: true,
+  }));
+  _stripe = new Stripe(result.Parameter.Value);
+  return _stripe;
+}
+
+async function getWebhookSecret() {
+  if (_webhookSecret) return _webhookSecret;
+  const result = await ssmClient.send(new GetParameterCommand({
+    Name: '/tacticaldropz/stripe/webhook_secret',
+    WithDecryption: true,
+  }));
+  _webhookSecret = result.Parameter.Value;
+  return _webhookSecret;
+}
 
 const response = (statusCode, body, headers = {}) => ({
   statusCode,
@@ -61,6 +85,7 @@ async function updateUserSubscription(userId, fields) {
 // ── POST /stripe/create-checkout — create a Stripe Checkout session ───────────
 
 async function createCheckout(userId) {
+  const stripe = await getStripe();
   const user = await getUserById(userId);
   if (!user) return response(404, { error: 'User not found' });
 
@@ -104,6 +129,7 @@ async function createCheckout(userId) {
 // ── POST /stripe/create-portal — customer self-service portal ────────────────
 
 async function createPortal(userId) {
+  const stripe = await getStripe();
   const user = await getUserById(userId);
   if (!user) return response(404, { error: 'User not found' });
   if (!user.stripeCustomerId) return response(400, { error: 'No subscription found' });
@@ -119,7 +145,8 @@ async function createPortal(userId) {
 // ── POST /stripe/webhook — handle Stripe events ───────────────────────────────
 
 async function handleWebhook(event) {
-  // Verify webhook signature
+  const stripe        = await getStripe();
+  const WEBHOOK_SECRET = await getWebhookSecret();
   let stripeEvent;
   try {
     stripeEvent = stripe.webhooks.constructEvent(
