@@ -164,6 +164,21 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'https://tacticaldropz.com'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'https://tacticaldropz.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'https://tacticaldropz.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
       Auth:
         Authorizers:
           CognitoAuthorizer:
