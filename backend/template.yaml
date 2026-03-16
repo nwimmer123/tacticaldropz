@@ -441,8 +441,6 @@ Resources:
             Path: /stripe/webhook
             Method: post
             RestApiId: !Ref ApiGateway
-            Auth:
-              Authorizer: NONE
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 
