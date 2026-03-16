@@ -26,6 +26,20 @@ export const handler = async (event) => {
 
   try {
 
+    // ── POST /users/verify ──────────────────────────────────────────────────
+    if (method === 'POST' && path.endsWith('/verify')) {
+      const { email, code } = body;
+      if (!email || !code) return response(400, { error: 'Email and code required' });
+
+      await cognito.send(new ConfirmSignUpCommand({
+        ClientId:         CLIENT_ID,
+        Username:         email,
+        ConfirmationCode: code,
+      }));
+
+      return response(200, { message: 'Email verified successfully' });
+    }
+
     // ── POST /users/signup ──────────────────────────────────────────────────
     if (method === 'POST' && path.endsWith('/signup')) {
       const { email, password } = body;

@@ -1,3 +1,166 @@
+// ─── API Config ───────────────────────────────────────────────────────────────
+const API_URL = 'https://7mszujxl65.execute-api.us-west-2.amazonaws.com/prod';
+
+async function apiCall(method, path, body = null, requiresAuth = false) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (requiresAuth) {
+    const token = localStorage.getItem('td_access_token');
+    if (!token) throw new Error('Not authenticated');
+    headers['Authorization'] = token;
+  }
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ─── Auth State ───────────────────────────────────────────────────────────────
+let currentUser = null; // { userId, email, subscriptionStatus, displayName }
+
+function isLoggedIn()  { return !!currentUser; }
+function isPro()       { return currentUser?.subscriptionStatus === 'pro' || currentUser?.subscriptionStatus === 'pro_trial'; }
+function getToken()    { return localStorage.getItem('td_access_token'); }
+
+async function loadCurrentUser() {
+  const token = localStorage.getItem('td_access_token');
+  if (!token) return;
+  try {
+    const user = await apiCall('GET', '/users/profile', null, true);
+    currentUser = user;
+  } catch (e) {
+    // Token expired or invalid — clear it
+    localStorage.removeItem('td_access_token');
+    localStorage.removeItem('td_refresh_token');
+    currentUser = null;
+  }
+}
+
+function logout() {
+  localStorage.removeItem('td_access_token');
+  localStorage.removeItem('td_refresh_token');
+  currentUser = null;
+  updateNavAuth();
+}
+
+// ─── Auth Modal ───────────────────────────────────────────────────────────────
+let _pendingVerifyEmail = null;
+
+function openAuthModal(tab = 'login') {
+  document.getElementById('authModalOverlay').style.display = 'flex';
+  switchAuthTab(tab);
+  clearAuthError();
+}
+
+function closeAuthModal() {
+  document.getElementById('authModalOverlay').style.display = 'none';
+  clearAuthError();
+  _pendingVerifyEmail = null;
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('loginForm').style.display  = tab === 'login'  ? 'block' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('verifyForm').style.display = 'none';
+  document.getElementById('loginTab').classList.toggle('active',  tab === 'login');
+  document.getElementById('signupTab').classList.toggle('active', tab === 'signup');
+  clearAuthError();
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function clearAuthError() {
+  const el = document.getElementById('authError');
+  if (el) el.style.display = 'none';
+}
+
+async function submitLogin() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) return showAuthError('Email and password required.');
+
+  try {
+    const data = await apiCall('POST', '/users/signin', { email, password });
+    localStorage.setItem('td_access_token',  data.accessToken);
+    localStorage.setItem('td_refresh_token', data.refreshToken);
+    await loadCurrentUser();
+    closeAuthModal();
+    updateNavAuth();
+    // Check if redirected back from Stripe success
+    if (window.location.search.includes('subscribed=true')) {
+      await loadCurrentUser(); // refresh to get pro status
+      updateNavAuth();
+      window.history.replaceState({}, '', '/');
+    }
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+async function submitSignup() {
+  const email    = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  if (!email || !password) return showAuthError('Email and password required.');
+
+  try {
+    await apiCall('POST', '/users/signup', { email, password });
+    _pendingVerifyEmail = email;
+    // Show verify form
+    document.getElementById('signupForm').style.display = 'none';
+    document.getElementById('verifyForm').style.display = 'block';
+    clearAuthError();
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+async function submitVerify() {
+  const code = document.getElementById('verifyCode').value.trim();
+  if (!code) return showAuthError('Enter the verification code from your email.');
+
+  try {
+    await apiCall('POST', '/users/verify', { email: _pendingVerifyEmail, code });
+    // Auto-login after verify
+    showAuthError('✅ Email verified! You can now log in.');
+    document.getElementById('authError').style.background = 'rgba(100,220,100,0.1)';
+    document.getElementById('authError').style.borderColor = 'rgba(100,220,100,0.3)';
+    document.getElementById('authError').style.color = '#64dc64';
+    document.getElementById('authError').style.display = 'block';
+    setTimeout(() => switchAuthTab('login'), 1500);
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+async function goPro() {
+  if (!isLoggedIn()) {
+    openAuthModal('signup');
+    return;
+  }
+  try {
+    const data = await apiCall('POST', '/stripe/create-checkout', {}, true);
+    window.location.href = data.url;
+  } catch (e) {
+    modalAlert('Error', e.message);
+  }
+}
+
+async function openBillingPortal() {
+  try {
+    const data = await apiCall('POST', '/stripe/create-portal', {}, true);
+    window.location.href = data.url;
+  } catch (e) {
+    modalAlert('Error', e.message);
+  }
+}
+
 // ─── Modal System ─────────────────────────────────────────────────────────────
 function showModal({ title, body, input, inputValue, inputPlaceholder, buttons }) {
   return new Promise(resolve => {
@@ -975,6 +1138,7 @@ function restoreListFromStorage() {
 async function init() {
   await loadDeployments();
   loadGwImages();
+  await loadCurrentUser();   // load auth state before building nav
   buildNav();
   buildMissionSidebar();
   bindToolbar();
@@ -985,6 +1149,18 @@ async function init() {
   initToolbarShapePicker();
   selectTool('models');
   drawScene();
+
+  // Handle Stripe success/cancel redirect
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('subscribed') === 'true') {
+    await loadCurrentUser();
+    updateNavAuth();
+    window.history.replaceState({}, '', '/');
+    if (isPro()) modalAlert('⚡ Welcome to Pro!', 'Your subscription is now active. Enjoy saved deployments and all Pro features!');
+  }
+  if (params.get('cancelled') === 'true') {
+    window.history.replaceState({}, '', '/');
+  }
 }
 
 // ─── Data Loading ─────────────────────────────────────────────────────────────
@@ -1156,7 +1332,85 @@ function buildNav() {
   feedback.className = 'nav-link';
   feedback.textContent = '📧 Feedback';
   nav.appendChild(feedback);
+
+  // Auth buttons placeholder — filled by updateNavAuth()
+  const authArea = document.createElement('div');
+  authArea.id = 'navAuthArea';
+  authArea.style.cssText = 'display:flex; gap:6px; align-items:center;';
+  nav.appendChild(authArea);
+  updateNavAuth();
 }
+
+function updateNavAuth() {
+  const area = document.getElementById('navAuthArea');
+  if (!area) return;
+  area.innerHTML = '';
+
+  if (!isLoggedIn()) {
+    // Logged out — show Login + Sign Up + Go Pro
+    const loginBtn = document.createElement('button');
+    loginBtn.className = 'nav-btn nav-btn-login';
+    loginBtn.textContent = 'Log In';
+    loginBtn.onclick = () => openAuthModal('login');
+
+    const signupBtn = document.createElement('button');
+    signupBtn.className = 'nav-btn nav-btn-signup';
+    signupBtn.textContent = 'Sign Up';
+    signupBtn.onclick = () => openAuthModal('signup');
+
+    const proBtn = document.createElement('button');
+    proBtn.className = 'nav-btn nav-btn-pro';
+    proBtn.textContent = '⚡ Go Pro';
+    proBtn.onclick = goPro;
+
+    area.appendChild(loginBtn);
+    area.appendChild(signupBtn);
+    area.appendChild(proBtn);
+  } else if (!isPro()) {
+    // Logged in, free tier
+    const pill = document.createElement('div');
+    pill.className = 'nav-user-pill';
+    pill.textContent = currentUser.email;
+    pill.onclick = () => modalConfirm('Account', `Logged in as ${currentUser.email}\nSubscription: Free`, 'Log Out', false).then(ok => { if (ok) logout(); });
+
+    const proBtn = document.createElement('button');
+    proBtn.className = 'nav-btn nav-btn-pro';
+    proBtn.textContent = '⚡ Go Pro';
+    proBtn.onclick = goPro;
+
+    area.appendChild(pill);
+    area.appendChild(proBtn);
+  } else {
+    // Logged in, Pro
+    const pill = document.createElement('div');
+    pill.className = 'nav-user-pill';
+
+    const emailSpan = document.createElement('span');
+    emailSpan.textContent = currentUser.email;
+
+    const badge = document.createElement('span');
+    badge.className = 'nav-pro-badge';
+    badge.textContent = 'PRO';
+
+    pill.appendChild(emailSpan);
+    pill.appendChild(badge);
+    pill.onclick = () => {
+      showModal({ title: 'Account', body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: <strong style="color:#64dc64">Pro ⚡</strong></p>`,
+        buttons: [
+          { label: 'Manage Billing', style: 'modal-btn-secondary', value: 'billing' },
+          { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout'  },
+          { label: 'Close',          style: 'modal-btn-primary',   value: 'close'   },
+        ]
+      }).then(v => {
+        if (v === 'logout')  logout();
+        if (v === 'billing') openBillingPortal();
+      });
+    };
+
+    area.appendChild(pill);
+  }
+}
+
 
 function populateLayoutDropdown() {
   const sel = document.getElementById('layoutSelect');

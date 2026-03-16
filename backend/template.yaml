@@ -188,6 +188,12 @@ Resources:
             Path: /users/signup
             Method: post
             RestApiId: !Ref ApiGateway
+        Verify:
+          Type: Api
+          Properties:
+            Path: /users/verify
+            Method: post
+            RestApiId: !Ref ApiGateway
         SignIn:
           Type: Api
           Properties:
