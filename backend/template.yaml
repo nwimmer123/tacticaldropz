@@ -185,6 +185,8 @@ Resources:
             UserPoolArn: !GetAtt UserPool.Arn
             Identity:
               Header: Authorization
+            AuthorizationScopes:
+              - aws.cognito.signin.user.admin
 
   # ── Lambda Functions ──────────────────────────────────────────────────────────
 
