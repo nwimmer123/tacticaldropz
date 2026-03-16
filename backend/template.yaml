@@ -19,6 +19,7 @@ Globals:
         SES_FROM_EMAIL: "noreply@tacticaldropz.com"
         APP_URL: "https://tacticaldropz.com"
         STRIPE_PRICE_LOOKUP_KEY: "TacticalDropzPro-c005ef8"
+        STRIPE_PRICE_ID: "price_1TBPlrR4Uvswi4uSqDy9oFwp"
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
