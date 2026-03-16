@@ -18,8 +18,8 @@ Globals:
         PROMO_CODES_TABLE: !Ref PromoCodesTable
         SES_FROM_EMAIL: "noreply@tacticaldropz.com"
         APP_URL: "https://tacticaldropz.com"
-        STRIPE_SECRET_KEY: !Sub "{{resolve:ssm:/tacticaldropz/stripe/secret_key}}"
-        STRIPE_WEBHOOK_SECRET: !Sub "{{resolve:ssm:/tacticaldropz/stripe/webhook_secret}}"
+        STRIPE_SECRET_KEY: !Sub "{{resolve:ssm-secure:/tacticaldropz/stripe/secret_key}}"
+        STRIPE_WEBHOOK_SECRET: !Sub "{{resolve:ssm-secure:/tacticaldropz/stripe/webhook_secret}}"
         STRIPE_PRICE_LOOKUP_KEY: "TacticalDropzPro-c005ef8"
   Api:
     Cors:
