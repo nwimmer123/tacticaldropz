@@ -648,15 +648,8 @@ function loadWtcImage() {
 }
 
 function updateHsToggleVisibility() {
-  const hsWrapper = document.getElementById('hsToggleWrapper');
-  if (!hsWrapper) return;
-  const show = currentTerrainFormat === 'wtc' && currentMission?.id === 'hammerAnvil';
-  hsWrapper.style.display = show ? 'flex' : 'none';
-  if (!show) {
-    hiddenSupplies = false;
-    const cb = document.getElementById('hiddenSuppliesToggle');
-    if (cb) cb.checked = false;
-  }
+  updateHsToggle(document.getElementById('leftSidebar'));
+  updateHsToggle(document.getElementById('mobileMenu'));
 }
 
 // ─── Army List Import ─────────────────────────────────────────────────────────
@@ -1305,62 +1298,6 @@ function buildNav() {
   spacer.style.flex = '1';
   nav.appendChild(spacer);
 
-  // Terrain Set dropdown
-  const terrainLabel = document.createElement('span');
-  terrainLabel.className = 'nav-label';
-  terrainLabel.textContent = 'Terrain:';
-  nav.appendChild(terrainLabel);
-
-  const terrainSelect = document.createElement('select');
-  terrainSelect.className = 'nav-select';
-  terrainSelect.id = 'terrainFormatSelect';
-  [
-    { value: 'gw', label: 'GW' },
-    { value: 'wtc', label: 'WTC' },
-    { value: 'uktc', label: 'UKTC (coming soon)' }
-  ].forEach(opt => {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    terrainSelect.appendChild(o);
-  });
-  terrainSelect.onchange = () => selectTerrainFormat(terrainSelect.value);
-  nav.appendChild(terrainSelect);
-
-  // Layout dropdown
-  const layoutLabel = document.createElement('span');
-  layoutLabel.className = 'nav-label';
-  layoutLabel.textContent = 'Layout:';
-  nav.appendChild(layoutLabel);
-
-  const layoutSelect = document.createElement('select');
-  layoutSelect.className = 'nav-select';
-  layoutSelect.id = 'layoutSelect';
-  nav.appendChild(layoutSelect);
-  layoutSelect.onchange = () => selectLayout(parseInt(layoutSelect.value));
-
-  populateLayoutDropdown();
-
-  // Hidden Supplies toggle (WTC + Hammer & Anvil only)
-  const hsWrapper = document.createElement('label');
-  hsWrapper.id = 'hsToggleWrapper';
-  hsWrapper.style.cssText = 'display:none; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#aaa; white-space:nowrap;';
-  const hsCb = document.createElement('input');
-  hsCb.type = 'checkbox';
-  hsCb.id   = 'hiddenSuppliesToggle';
-  hsCb.style.cssText = 'width:15px; height:15px; cursor:pointer; accent-color:#e94560;';
-  hsCb.onchange = () => { hiddenSupplies = hsCb.checked; loadWtcImage(); };
-  const hsLbl = document.createElement('span');
-  hsLbl.textContent = 'Hidden Supplies';
-  hsWrapper.appendChild(hsCb);
-  hsWrapper.appendChild(hsLbl);
-  nav.appendChild(hsWrapper);
-
-  // Divider before About
-  const divider0 = document.createElement('div');
-  divider0.className = 'nav-divider';
-  nav.appendChild(divider0);
-
   // About link
   const about = document.createElement('a');
   about.href = 'about.html';
@@ -1368,10 +1305,10 @@ function buildNav() {
   about.textContent = 'About';
   nav.appendChild(about);
 
-  // Spacer before auth area
-  const spacer2 = document.createElement('div');
-  spacer2.className = 'nav-divider';
-  nav.appendChild(spacer2);
+  // Divider
+  const d1 = document.createElement('div');
+  d1.className = 'nav-divider';
+  nav.appendChild(d1);
 
   // Feedback link
   const feedback = document.createElement('a');
@@ -1381,11 +1318,11 @@ function buildNav() {
   nav.appendChild(feedback);
 
   // Divider before auth
-  const divider = document.createElement('div');
-  divider.className = 'nav-divider';
-  nav.appendChild(divider);
+  const d2 = document.createElement('div');
+  d2.className = 'nav-divider';
+  nav.appendChild(d2);
 
-  // Auth buttons placeholder — filled by updateNavAuth()
+  // Auth buttons
   const authArea = document.createElement('div');
   authArea.id = 'navAuthArea';
   authArea.style.cssText = 'display:flex; gap:6px; align-items:center;';
@@ -1469,28 +1406,130 @@ function updateNavAuth() {
 
 
 function populateLayoutDropdown() {
-  const sel = document.getElementById('layoutSelect');
-  sel.innerHTML = '';
-  for (let i = 1; i <= 8; i++) {
-    const o = document.createElement('option');
-    o.value = i - 1;
-    o.textContent = `Layout ${i}`;
-    sel.appendChild(o);
-  }
   currentLayoutIndex = 0;
-  sel.value = 0;
+  buildLayoutGrid(document.getElementById('leftSidebar'));
+  const mobileMenu = document.getElementById('mobileMenu');
+  if (mobileMenu && mobileMenu.children.length > 0) {
+    buildLayoutGrid(mobileMenu);
+  }
 }
 
 function buildMissionSidebar() {
   const sidebar = document.getElementById('leftSidebar');
-  sidebar.innerHTML = '<div class="sidebar-header">Mission</div>';
+  sidebar.innerHTML = '';
+
+  // ── FORMAT ──
+  const fmtHeader = document.createElement('div');
+  fmtHeader.className = 'sidebar-header';
+  fmtHeader.textContent = 'Format';
+  sidebar.appendChild(fmtHeader);
+
+  const formats = [
+    { value: 'gw',   label: 'GW' },
+    { value: 'wtc',  label: 'WTC' },
+    { value: 'uktc', label: 'UKTC (soon)' },
+  ];
+  formats.forEach(fmt => {
+    const opt = document.createElement('div');
+    opt.className = 'deploy-option' + (currentTerrainFormat === fmt.value ? ' active' : '');
+    opt.dataset.format = fmt.value;
+    opt.textContent = fmt.label;
+    opt.onclick = () => {
+      sidebar.querySelectorAll('[data-format]').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      selectTerrainFormat(fmt.value);
+      buildLayoutGrid(sidebar);
+    };
+    sidebar.appendChild(opt);
+  });
+
+  // ── MISSION ──
+  const missionHeader = document.createElement('div');
+  missionHeader.className = 'sidebar-header';
+  missionHeader.textContent = 'Mission';
+  sidebar.appendChild(missionHeader);
+
   deployments.forEach(mission => {
     const opt = document.createElement('div');
-    opt.className = `deploy-option ${mission === currentMission ? 'active' : ''}`;
+    opt.className = 'deploy-option' + (mission === currentMission ? ' active' : '');
     opt.textContent = mission.name;
     opt.dataset.id = mission.id;
-    opt.onclick = () => selectMission(mission.id);
+    opt.onclick = () => {
+      sidebar.querySelectorAll('[data-id]').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      selectMission(mission.id);
+      updateHsToggle(sidebar);
+    };
     sidebar.appendChild(opt);
+  });
+
+  // ── LAYOUT ──
+  const layoutHeader = document.createElement('div');
+  layoutHeader.className = 'sidebar-header';
+  layoutHeader.textContent = 'Layout';
+  sidebar.appendChild(layoutHeader);
+
+  const layoutGrid = document.createElement('div');
+  layoutGrid.id = 'sidebarLayoutGrid';
+  layoutGrid.className = 'sidebar-layout-grid';
+  sidebar.appendChild(layoutGrid);
+  buildLayoutGrid(sidebar);
+
+  // ── OPTIONS / Hidden Supplies ──
+  const hsWrapper = document.createElement('label');
+  hsWrapper.id = 'hsToggleWrapper';
+  hsWrapper.className = 'sidebar-hs-toggle';
+  hsWrapper.style.display = 'none';
+
+  const hsCb = document.createElement('input');
+  hsCb.type = 'checkbox';
+  hsCb.id   = 'hiddenSuppliesToggle';
+  hsCb.style.cssText = 'width:14px; height:14px; cursor:pointer; accent-color:#e94560;';
+  hsCb.onchange = () => { hiddenSupplies = hsCb.checked; loadWtcImage(); };
+
+  const hsLbl = document.createElement('span');
+  hsLbl.textContent = 'Hidden Supplies';
+
+  hsWrapper.appendChild(hsCb);
+  hsWrapper.appendChild(hsLbl);
+  sidebar.appendChild(hsWrapper);
+
+  updateHsToggle(sidebar);
+}
+
+function buildLayoutGrid(container) {
+  const grid = container
+    ? container.querySelector('.sidebar-layout-grid')
+    : document.querySelector('.sidebar-layout-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (let i = 1; i <= 8; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'layout-btn' + (currentLayoutIndex === i - 1 ? ' active' : '');
+    btn.textContent = i;
+    const idx = i - 1;
+    btn.onclick = () => {
+      grid.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectLayout(idx);
+    };
+    grid.appendChild(btn);
+  }
+}
+
+function updateHsToggle(container) {
+  const show = currentTerrainFormat === 'wtc' && currentMission?.id === 'hammerAnvil';
+
+  // Update all HS toggles — sidebar and mobile
+  ['hsToggleWrapper', 'mobileHsToggle'].forEach(id => {
+    const wrapper = document.getElementById(id);
+    if (!wrapper) return;
+    wrapper.style.display = show ? 'flex' : 'none';
+    if (!show) {
+      hiddenSupplies = false;
+      const cb = wrapper.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = false;
+    }
   });
 }
 
@@ -1504,11 +1543,13 @@ function bindToolbar() {
 }
 
 function bindCanvas() {
-  canvas.addEventListener('mousedown', handleMouseDown);
-  canvas.addEventListener('mousemove', handleMouseMove);
-  canvas.addEventListener('dblclick', handleDoubleClick);
-  canvas.addEventListener('mouseup', handleMouseUp);
-  canvas.addEventListener('mouseleave', handleMouseUp);
+  const isMobileEvent = () => window.innerWidth < 768;
+
+  canvas.addEventListener('mousedown',  e => { if (!isMobileEvent()) handleMouseDown(e); });
+  canvas.addEventListener('mousemove',  e => { if (!isMobileEvent()) handleMouseMove(e); });
+  canvas.addEventListener('dblclick',   e => { if (!isMobileEvent()) handleDoubleClick(e); });
+  canvas.addEventListener('mouseup',    e => { if (!isMobileEvent()) handleMouseUp(e); });
+  canvas.addEventListener('mouseleave', e => { if (!isMobileEvent()) handleMouseUp(e); });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 }
 
@@ -1518,23 +1559,29 @@ function selectTerrainFormat(format) {
   currentLayoutIndex = 0;
   if (format !== 'wtc') { wtcImage = null; wtcImageSrc = null; }
   populateLayoutDropdown();
-  updateHsToggleVisibility();
+  updateHsToggle(document.getElementById('leftSidebar'));
+  updateHsToggle(document.getElementById('mobileMenu'));
   if (format === 'wtc') loadWtcImage();
   else drawScene();
 }
 
 function selectLayout(index) {
   currentLayoutIndex = index;
+  // Update active state in sidebar grid
+  document.querySelectorAll('.layout-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === index);
+  });
   if (currentTerrainFormat === 'wtc') loadWtcImage();
   else drawScene();
 }
 
 function selectMission(id) {
   currentMission = deployments.find(d => d.id === id);
-  document.querySelectorAll('.deploy-option').forEach(o => {
+  document.querySelectorAll('[data-id]').forEach(o => {
     o.classList.toggle('active', o.dataset.id === id);
   });
-  updateHsToggleVisibility();
+  updateHsToggle(document.getElementById('leftSidebar'));
+  updateHsToggle(document.getElementById('mobileMenu'));
   if (currentTerrainFormat === 'wtc') { populateLayoutDropdown(); loadWtcImage(); }
   else drawScene();
 }
@@ -2194,6 +2241,7 @@ function updateUnitsList() {
 
 // ─── Hints ────────────────────────────────────────────────────────────────────
 function showDrawingHint(text) {
+  if (window.innerWidth < 768) return; // no hint on mobile
   const wrapper = document.getElementById('canvasWrapper');
   if (!hintElement) {
     hintElement = document.createElement('div');
@@ -2333,19 +2381,9 @@ async function loadDeployment(deploymentId) {
   try {
     const dep = await apiCall('GET', `/deployments/${deploymentId}`, null, true);
 
-    // Restore board state
+    if (dep.terrainFormat) selectTerrainFormat(dep.terrainFormat);
     if (dep.mission) selectMission(dep.mission);
-    if (dep.terrainFormat) {
-      currentTerrainFormat = dep.terrainFormat;
-      const sel = document.getElementById('terrainFormatSelect');
-      if (sel) sel.value = dep.terrainFormat;
-      populateLayoutDropdown();
-    }
-    if (dep.layoutIndex !== undefined) {
-      currentLayoutIndex = dep.layoutIndex;
-      const sel = document.getElementById('layoutSelect');
-      if (sel) sel.value = dep.layoutIndex;
-    }
+    if (dep.layoutIndex !== undefined) selectLayout(dep.layoutIndex);
     drawings = dep.boardData || [];
     closeDeploymentsModal();
     drawScene();
@@ -2393,9 +2431,23 @@ function clearCanvas() {
 
 // ─── Resize ───────────────────────────────────────────────────────────────────
 function resizeCanvas() {
+  const isMobile = window.innerWidth < 768;
+  if (isMobile) {
+    const ratio = 900 / 660;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw / vh > ratio) {
+      canvas.style.height = vh + 'px';
+      canvas.style.width  = (vh * ratio) + 'px';
+    } else {
+      canvas.style.width  = vw + 'px';
+      canvas.style.height = (vw / ratio) + 'px';
+    }
+    return;
+  }
   const wrapper = document.getElementById('canvasWrapper');
-  const W = wrapper.clientWidth - 40;
-  const H = wrapper.clientHeight - 40;
+  const W = wrapper.clientWidth - 8;
+  const H = wrapper.clientHeight - 8;
   const ratio = 900 / 660;
   if (W / H > ratio) {
     canvas.style.height = H + 'px';
@@ -2404,6 +2456,166 @@ function resizeCanvas() {
     canvas.style.width = W + 'px';
     canvas.style.height = (W / ratio) + 'px';
   }
+}
+
+// ─── Mobile Hamburger Menu ────────────────────────────────────────────────────
+
+function buildMobileMenu() {
+  const menu = document.getElementById('mobileMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+
+  // ── ACCOUNT ──
+  const acctHeader = document.createElement('div');
+  acctHeader.className = 'mobile-section-header';
+  acctHeader.textContent = 'Account';
+  menu.appendChild(acctHeader);
+
+  if (!isLoggedIn()) {
+    const loginBtn = document.createElement('button');
+    loginBtn.className = 'mobile-menu-btn';
+    loginBtn.textContent = '👤 Log In / Sign Up';
+    loginBtn.onclick = () => { closeMobileMenu(); openAuthModal('login'); };
+    menu.appendChild(loginBtn);
+
+    const proBtn = document.createElement('button');
+    proBtn.className = 'mobile-menu-btn mobile-pro-btn';
+    proBtn.textContent = '⚡ Go Pro — $5/mo';
+    proBtn.onclick = () => { closeMobileMenu(); goPro(); };
+    menu.appendChild(proBtn);
+  } else {
+    const emailDiv = document.createElement('div');
+    emailDiv.className = 'mobile-menu-email';
+    emailDiv.textContent = currentUser.email;
+    if (isPro()) {
+      const badge = document.createElement('span');
+      badge.className = 'nav-pro-badge';
+      badge.textContent = 'PRO';
+      badge.style.marginLeft = '6px';
+      emailDiv.appendChild(badge);
+    }
+    menu.appendChild(emailDiv);
+
+    if (!isPro()) {
+      const proBtn = document.createElement('button');
+      proBtn.className = 'mobile-menu-btn mobile-pro-btn';
+      proBtn.textContent = '⚡ Go Pro — $5/mo';
+      proBtn.onclick = () => { closeMobileMenu(); goPro(); };
+      menu.appendChild(proBtn);
+    }
+
+    const logoutBtn = document.createElement('button');
+    logoutBtn.className = 'mobile-menu-btn';
+    logoutBtn.textContent = '🚪 Log Out';
+    logoutBtn.onclick = () => { closeMobileMenu(); logout(); };
+    menu.appendChild(logoutBtn);
+  }
+
+  // ── BOARD ──
+  const boardHeader = document.createElement('div');
+  boardHeader.className = 'mobile-section-header';
+  boardHeader.textContent = 'Board';
+  menu.appendChild(boardHeader);
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'mobile-menu-btn';
+  clearBtn.textContent = '🗑️ Clear Board';
+  clearBtn.onclick = () => { closeMobileMenu(); clearCanvas(); };
+  menu.appendChild(clearBtn);
+
+  if (isPro()) {
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'mobile-menu-btn';
+    saveBtn.textContent = '💾 Save Deployment';
+    saveBtn.onclick = () => { closeMobileMenu(); saveDeployment(); };
+    menu.appendChild(saveBtn);
+
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'mobile-menu-btn';
+    loadBtn.textContent = '📂 My Deployments';
+    loadBtn.onclick = () => { closeMobileMenu(); openDeploymentsModal(); };
+    menu.appendChild(loadBtn);
+  }
+
+  // ── FORMAT ──
+  const fmtHeader = document.createElement('div');
+  fmtHeader.className = 'mobile-section-header';
+  fmtHeader.textContent = 'Format';
+  menu.appendChild(fmtHeader);
+
+  [{ value: 'gw', label: 'GW' }, { value: 'wtc', label: 'WTC' }, { value: 'uktc', label: 'UKTC (soon)' }].forEach(fmt => {
+    const btn = document.createElement('button');
+    btn.className = 'mobile-menu-btn' + (currentTerrainFormat === fmt.value ? ' active' : '');
+    btn.textContent = fmt.label;
+    btn.dataset.format = fmt.value;
+    btn.onclick = () => {
+      menu.querySelectorAll('[data-format]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectTerrainFormat(fmt.value);
+      buildLayoutGrid(menu);
+      updateHsToggle(menu);
+    };
+    menu.appendChild(btn);
+  });
+
+  // ── MISSION ──
+  const missionHeader = document.createElement('div');
+  missionHeader.className = 'mobile-section-header';
+  missionHeader.textContent = 'Mission';
+  menu.appendChild(missionHeader);
+
+  deployments.forEach(mission => {
+    const btn = document.createElement('button');
+    btn.className = 'mobile-menu-btn' + (mission === currentMission ? ' active' : '');
+    btn.textContent = mission.name;
+    btn.dataset.id = mission.id;
+    btn.onclick = () => {
+      menu.querySelectorAll('[data-id]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectMission(mission.id);
+      updateHsToggle(menu);
+    };
+    menu.appendChild(btn);
+  });
+
+  // ── LAYOUT ──
+  const layoutHeader = document.createElement('div');
+  layoutHeader.className = 'mobile-section-header';
+  layoutHeader.textContent = 'Layout';
+  menu.appendChild(layoutHeader);
+
+  const layoutGrid = document.createElement('div');
+  layoutGrid.id = 'mobileLayoutGrid';
+  layoutGrid.className = 'sidebar-layout-grid';
+  menu.appendChild(layoutGrid);
+  buildLayoutGrid(menu);
+
+  // ── Hidden Supplies ──
+  const hsWrapper = document.createElement('label');
+  hsWrapper.id = 'mobileHsToggle';
+  hsWrapper.className = 'sidebar-hs-toggle';
+  hsWrapper.style.display = 'none';
+  const hsCb = document.createElement('input');
+  hsCb.type = 'checkbox';
+  hsCb.style.cssText = 'width:14px; height:14px; cursor:pointer; accent-color:#e94560;';
+  hsCb.onchange = () => { hiddenSupplies = hsCb.checked; loadWtcImage(); };
+  const hsLbl = document.createElement('span');
+  hsLbl.textContent = 'Hidden Supplies';
+  hsWrapper.appendChild(hsCb);
+  hsWrapper.appendChild(hsLbl);
+  menu.appendChild(hsWrapper);
+  updateHsToggle(menu);
+}
+
+function openMobileMenu() {
+  buildMobileMenu();
+  document.getElementById('mobileMenuOverlay').style.display = 'block';
+  document.getElementById('mobileMenu').classList.add('open');
+}
+
+function closeMobileMenu() {
+  document.getElementById('mobileMenuOverlay').style.display = 'none';
+  document.getElementById('mobileMenu').classList.remove('open');
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

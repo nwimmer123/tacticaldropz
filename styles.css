@@ -164,17 +164,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 4px;
 }
 
 #battlefield {
   display: block;
   cursor: crosshair;
   image-rendering: crisp-edges;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
 }
 
 /* ── Toolbar ── */
@@ -986,4 +982,190 @@ input[type="text"]::placeholder { color: #555; }
   text-align: center;
   color: #555;
   font-size: 13px;
+}
+
+/* ── Sidebar Layout Grid ── */
+.sidebar-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px 12px;
+}
+
+.layout-btn {
+  padding: 7px 0;
+  background: #0f3460;
+  border: 1px solid #1a508b;
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.layout-btn:hover { background: #1a508b; color: #fff; }
+.layout-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+
+/* ── Sidebar HS Toggle ── */
+.sidebar-hs-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #aaa;
+  cursor: pointer;
+  border-top: 1px solid #0f3460;
+  margin-top: 4px;
+}
+
+/* ── Mobile Hamburger ── */
+.mobile-hamburger {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  background: rgba(22, 33, 62, 0.92);
+  border: 1px solid #1a508b;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.mobile-hamburger:hover { background: rgba(233,69,96,0.9); }
+
+/* ── Mobile Overlay ── */
+.mobile-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 210;
+}
+
+/* ── Mobile Menu Panel ── */
+.mobile-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  background: #16213e;
+  border-right: 1px solid #0f3460;
+  z-index: 220;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease-out;
+  padding-bottom: 24px;
+}
+
+.mobile-menu.open {
+  transform: translateX(0);
+}
+
+.mobile-section-header {
+  padding: 10px 16px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #e94560;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-top: 8px;
+}
+
+.mobile-menu-btn {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: #ccc;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mobile-menu-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.mobile-menu-btn.active { color: #fff; background: rgba(233,69,96,0.1); border-left: 3px solid #e94560; }
+.mobile-pro-btn { color: #f6d365 !important; }
+
+.mobile-menu-email {
+  padding: 10px 16px;
+  font-size: 12px;
+  color: #888;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+/* ── Responsive — Phone (<768px) ── */
+@media (max-width: 767px) {
+  body { overflow: hidden; }
+
+  .top-nav { display: none !important; }
+  .left-sidebar { display: none !important; }
+  .toolbar { display: none !important; }
+  .staging-area { display: none !important; }
+  .right-sidebar { display: none !important; }
+
+  .container { height: 100vh; }
+  .main-content { height: 100vh; }
+  .canvas-area { height: 100vh; flex: 1; }
+  .canvas-with-sidebar { height: 100vh; flex: 1; position: relative; }
+
+  .canvas-wrapper {
+    padding: 0 !important;
+    flex: 1;
+    width: 100%;
+    height: 100vh !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #0a0e1a;
+  }
+
+  #battlefield {
+    display: block;
+    /* JS handles width/height — no CSS overrides */
+  }
+
+  .drawing-hint {
+    display: none !important;
+  }
+
+  .mobile-hamburger {
+    display: flex !important;
+  }
+
+  .modal-box {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  .review-modal-box,
+  .import-modal-box,
+  .deployments-modal-box,
+  .auth-modal-box {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 85vh !important;
+  }
+}
+
+/* ── Toolbar inline divider ── */
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 2px;
+  flex-shrink: 0;
 }
