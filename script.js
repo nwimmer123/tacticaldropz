@@ -45,6 +45,7 @@ function logout() {
   localStorage.removeItem('td_refresh_token');
   currentUser = null;
   updateNavAuth();
+  updateSaveLoadButtons();
 }
 
 // ─── Auth Modal ───────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ async function submitLogin() {
     await loadCurrentUser();
     closeAuthModal();
     updateNavAuth();
+    updateSaveLoadButtons();
     if (window.location.search.includes('subscribed=true')) {
       await loadCurrentUser();
       updateNavAuth();
@@ -1182,6 +1184,7 @@ async function init() {
   restoreListFromStorage();
   initToolbarShapePicker();
   selectTool('models');
+  updateSaveLoadButtons();
   drawScene();
 
   // Handle Stripe success/cancel redirect
@@ -2211,54 +2214,160 @@ function updateHintForTool() {
   }
 }
 
-// ─── Save / Load ──────────────────────────────────────────────────────────────
-function savePlan() {
-  const plan = {
-    version: 2,
-    mission: currentMission?.id,
-    terrainFormat: currentTerrainFormat,
-    layoutIndex: currentLayoutIndex,
-    drawings
-  };
-  const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const ts = new Date().toISOString().slice(0, 10);
-  a.download = `tacticaldropz-${currentMission?.id || 'plan'}-${ts}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+// ─── Save / Load (Pro Cloud) ──────────────────────────────────────────────────
+
+function updateSaveLoadButtons() {
+  const saveBtn = document.getElementById('saveBtn');
+  const loadBtn = document.getElementById('loadBtn');
+  if (!saveBtn || !loadBtn) return;
+  const show = isPro();
+  saveBtn.style.display = show ? 'inline-block' : 'none';
+  loadBtn.style.display = show ? 'inline-block' : 'none';
 }
 
-function loadPlan() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
-  input.onchange = e => {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const plan = JSON.parse(ev.target.result);
-        if (plan.mission) selectMission(plan.mission);
-        if (plan.terrainFormat) {
-          currentTerrainFormat = plan.terrainFormat;
-          document.getElementById('terrainFormatSelect').value = plan.terrainFormat;
-          populateLayoutDropdown();
-        }
-        if (plan.layoutIndex !== undefined) {
-          currentLayoutIndex = plan.layoutIndex;
-          document.getElementById('layoutSelect').value = plan.layoutIndex;
-        }
-        drawings = plan.drawings || [];
-        drawScene();
-        updateUnitsList();
-      } catch (err) {
-        modalAlert('Error Loading Plan', err.message);
-      }
+async function saveDeployment() {
+  if (!isPro()) return;
+
+  const name = await modalPrompt('Save Deployment', 'Give this deployment a name:', '', 'e.g. WTC Round 1 vs Space Marines');
+  if (!name || !name.trim()) return;
+
+  try {
+    const payload = {
+      name:          name.trim(),
+      mission:       currentMission?.id || null,
+      faction:       importedList?.faction || null,
+      terrainFormat: currentTerrainFormat,
+      layoutIndex:   currentLayoutIndex,
+      edition:       importedList?.edition || '10th',
+      boardData:     drawings,
     };
-    reader.readAsText(e.target.files[0]);
-  };
-  input.click();
+    await apiCall('POST', '/deployments', payload, true);
+    modalAlert('Saved!', `"${name.trim()}" has been saved to your account.`);
+  } catch (e) {
+    modalAlert('Error', 'Could not save deployment: ' + e.message);
+  }
+}
+
+async function openDeploymentsModal() {
+  if (!isPro()) return;
+  document.getElementById('deploymentsModalOverlay').style.display = 'flex';
+  const body = document.getElementById('deploymentsListBody');
+  body.innerHTML = '<div class="deployments-loading">Loading...</div>';
+
+  try {
+    const data = await apiCall('GET', '/deployments', null, true);
+    renderDeploymentsList(data.deployments || []);
+  } catch (e) {
+    body.innerHTML = `<div class="deployments-empty">Could not load deployments: ${e.message}</div>`;
+  }
+}
+
+function closeDeploymentsModal() {
+  document.getElementById('deploymentsModalOverlay').style.display = 'none';
+}
+
+function renderDeploymentsList(deployments) {
+  const body = document.getElementById('deploymentsListBody');
+  body.innerHTML = '';
+
+  if (deployments.length === 0) {
+    body.innerHTML = '<div class="deployments-empty">No saved deployments yet.<br>Use 💾 Save to save your first deployment.</div>';
+    return;
+  }
+
+  // Sort by most recent first
+  deployments.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+  deployments.forEach(dep => {
+    const item = document.createElement('div');
+    item.className = 'deployment-item';
+
+    const icon = document.createElement('div');
+    icon.className = 'deployment-item-icon';
+    icon.textContent = '⚔️';
+
+    const info = document.createElement('div');
+    info.className = 'deployment-item-info';
+
+    const name = document.createElement('div');
+    name.className = 'deployment-item-name';
+    name.textContent = dep.name;
+
+    const meta = document.createElement('div');
+    meta.className = 'deployment-item-meta';
+    const date = new Date(dep.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const parts = [dep.mission, dep.faction, date].filter(Boolean);
+    meta.textContent = parts.join(' · ');
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'deployment-item-actions';
+
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'modal-btn modal-btn-primary';
+    loadBtn.style.padding = '5px 12px';
+    loadBtn.style.fontSize = '12px';
+    loadBtn.textContent = 'Load';
+    loadBtn.onclick = () => loadDeployment(dep.deploymentId);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'modal-btn modal-btn-danger';
+    delBtn.style.padding = '5px 12px';
+    delBtn.style.fontSize = '12px';
+    delBtn.textContent = '🗑️';
+    delBtn.onclick = () => deleteDeployment(dep.deploymentId, dep.name, item);
+
+    actions.appendChild(loadBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(icon);
+    item.appendChild(info);
+    item.appendChild(actions);
+    body.appendChild(item);
+  });
+}
+
+async function loadDeployment(deploymentId) {
+  try {
+    const dep = await apiCall('GET', `/deployments/${deploymentId}`, null, true);
+
+    // Restore board state
+    if (dep.mission) selectMission(dep.mission);
+    if (dep.terrainFormat) {
+      currentTerrainFormat = dep.terrainFormat;
+      const sel = document.getElementById('terrainFormatSelect');
+      if (sel) sel.value = dep.terrainFormat;
+      populateLayoutDropdown();
+    }
+    if (dep.layoutIndex !== undefined) {
+      currentLayoutIndex = dep.layoutIndex;
+      const sel = document.getElementById('layoutSelect');
+      if (sel) sel.value = dep.layoutIndex;
+    }
+    drawings = dep.boardData || [];
+    closeDeploymentsModal();
+    drawScene();
+    updateUnitsList();
+  } catch (e) {
+    modalAlert('Error', 'Could not load deployment: ' + e.message);
+  }
+}
+
+async function deleteDeployment(deploymentId, name, itemEl) {
+  const ok = await modalConfirm('Delete Deployment', `Delete "${name}"? This cannot be undone.`, 'Delete', true);
+  if (!ok) return;
+  try {
+    await apiCall('DELETE', `/deployments/${deploymentId}`, null, true);
+    itemEl.remove();
+    const body = document.getElementById('deploymentsListBody');
+    if (!body.children.length) {
+      body.innerHTML = '<div class="deployments-empty">No saved deployments yet.</div>';
+    }
+  } catch (e) {
+    modalAlert('Error', 'Could not delete deployment: ' + e.message);
+  }
 }
 
 // ─── Clear ────────────────────────────────────────────────────────────────────

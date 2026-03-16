@@ -913,3 +913,77 @@ input[type="text"]::placeholder { color: #555; }
 }
 
 .nav-user-email:hover { color: #fff; }
+
+/* ── Deployments Modal ── */
+.deployments-modal-box {
+  width: 520px !important;
+  max-width: 96vw !important;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.deployments-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+}
+
+.deployment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+
+.deployment-item:last-child { border-bottom: none; }
+.deployment-item:hover { background: rgba(255,255,255,0.03); }
+
+.deployment-item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.deployment-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.deployment-item-name {
+  font-size: 13px;
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deployment-item-meta {
+  font-size: 11px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.deployment-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.deployments-empty {
+  padding: 32px;
+  text-align: center;
+  color: #444;
+  font-size: 13px;
+}
+
+.deployments-loading {
+  padding: 32px;
+  text-align: center;
+  color: #555;
+  font-size: 13px;
+}
