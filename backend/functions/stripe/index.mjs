@@ -95,6 +95,9 @@ async function createCheckout(userId) {
     expand: ['data.product'],
   });
 
+  console.log('Price lookup key:', PRICE_LOOKUP);
+  console.log('Prices found:', JSON.stringify(prices.data.map(p => ({ id: p.id, lookup_key: p.lookup_key, active: p.active }))));
+
   if (!prices.data.length) return response(500, { error: 'Price not found in Stripe' });
   const priceId = prices.data[0].id;
 
