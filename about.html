@@ -30,18 +30,26 @@
     .tier-box.pro { border-color:rgba(233,69,96,0.4); }
     .tier-box h4 { font-size:13px; font-weight:700; margin-bottom:10px; color:#fff; }
     .tier-box ul { margin:0; padding-left:16px; }
+    /* ── Mobile overrides for about page ── */
+    @media (max-width: 767px) {
+      body { overflow: auto !important; }
+      .top-nav { display: flex !important; }
+      .container { height: auto !important; min-height: 100vh; overflow: visible !important; }
+      .main-content { overflow: visible !important; height: auto !important; flex-direction: column; }
+      .canvas-area { overflow: visible !important; height: auto !important; }
+      .canvas-wrapper { overflow: visible !important; height: auto !important; padding: 0 !important; align-items: flex-start !important; justify-content: flex-start !important; }
+      .help-content { padding: 20px 16px; }
+      .free-vs-pro { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <div class="banner">
-    <div class="banner-text">TacticalDropz — Warhammer 40K Deployment Planning Tool</div>
-  </div>
   <div class="container">
     <div class="top-nav">
-      <a href="index.html" class="nav-link">← Planner</a>
+      <a href="index.html" class="nav-link">← Back to Planner</a>
       <span class="nav-title" style="margin-left:8px;">About & Help</span>
     </div>
-    <div class="main-content">
+    <div class="main-content" style="overflow-y:auto;">
       <div class="canvas-area" style="overflow-y:auto;">
         <div class="canvas-wrapper" style="align-items:flex-start; justify-content:flex-start; overflow-y:auto; height:100%;">
           <div class="help-content">
@@ -235,6 +243,30 @@
               <li>Your imported army list persists automatically across page refreshes (free users, same browser)</li>
             </ul>
             <div class="tip">💡 Pro users get cloud save — deployments are stored to your account and accessible from any device or browser.</div>
+
+            <hr class="section-rule">
+
+            <h2>📱 Mobile</h2>
+            <p>On phones, TacticalDropz runs in view-only mode — the full canvas fills your screen with no toolbar or menus in the way. Use it to reference terrain layouts while setting up the table, or load a saved deployment to show your opponent your plan.</p>
+
+            <h3>Navigation</h3>
+            <ul>
+              <li>Tap <strong>☰</strong> in the top-left corner to open the menu</li>
+              <li>Tap outside the menu panel to close it</li>
+              <li>All selections (Format, Mission, Layout) stay open until you close manually</li>
+            </ul>
+
+            <h3>Menu sections</h3>
+            <ul>
+              <li><strong>Account</strong> — log in, sign up, Go Pro, or log out</li>
+              <li><strong>Board</strong> — About & Help, Clear Board, Save and load deployments (Pro)</li>
+              <li><strong>Format</strong> — switch between GW, WTC, UKTC</li>
+              <li><strong>Mission</strong> — select the mission to see deployment zones and objectives</li>
+              <li><strong>Layout</strong> — pick terrain layout 1–8</li>
+              <li><strong>Hidden Supplies</strong> — appears when WTC + Hammer & Anvil are selected</li>
+            </ul>
+
+            <div class="tip">💡 Tablet users (768px+) get the full desktop experience with all tools.</div>
 
             <hr class="section-rule">
 

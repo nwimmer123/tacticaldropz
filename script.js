@@ -1302,7 +1302,7 @@ function buildNav() {
   const about = document.createElement('a');
   about.href = 'about.html';
   about.className = 'nav-link';
-  about.textContent = 'About';
+  about.textContent = 'About & Help';
   nav.appendChild(about);
 
   // Divider
@@ -2241,14 +2241,29 @@ function updateUnitsList() {
 
 // ─── Hints ────────────────────────────────────────────────────────────────────
 function showDrawingHint(text) {
-  if (window.innerWidth < 768) return; // no hint on mobile
+  if (window.innerWidth < 768) return;
   const wrapper = document.getElementById('canvasWrapper');
   if (!hintElement) {
     hintElement = document.createElement('div');
     hintElement.className = 'drawing-hint';
+
+    const closeBtn = document.createElement('span');
+    closeBtn.textContent = '✕';
+    closeBtn.className = 'drawing-hint-close';
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      hideDrawingHint();
+      drawingHintShown = true;
+    };
+    hintElement.appendChild(closeBtn);
+
+    const textSpan = document.createElement('span');
+    hintElement.appendChild(textSpan);
+    hintElement._textSpan = textSpan;
+
     wrapper.appendChild(hintElement);
   }
-  hintElement.textContent = text || '👆 Click to add points — Double-click to finish unit';
+  (hintElement._textSpan || hintElement).textContent = text || '👆 Click to add points — Double-click to finish unit';
 }
 
 function hideDrawingHint() {
@@ -2516,6 +2531,14 @@ function buildMobileMenu() {
   boardHeader.className = 'mobile-section-header';
   boardHeader.textContent = 'Board';
   menu.appendChild(boardHeader);
+
+  const aboutBtn = document.createElement('a');
+  aboutBtn.href = 'about.html';
+  aboutBtn.className = 'mobile-menu-btn';
+  aboutBtn.style.textDecoration = 'none';
+  aboutBtn.style.display = 'block';
+  aboutBtn.textContent = '❓ About & Help';
+  menu.appendChild(aboutBtn);
 
   const clearBtn = document.createElement('button');
   clearBtn.className = 'mobile-menu-btn';

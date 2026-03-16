@@ -1169,3 +1169,14 @@ input[type="text"]::placeholder { color: #555; }
   margin: 0 2px;
   flex-shrink: 0;
 }
+
+/* ── Drawing hint close button ── */
+.drawing-hint-close {
+  margin-right: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 11px;
+  vertical-align: middle;
+  transition: opacity 0.2s;
+}
+.drawing-hint-close:hover { opacity: 1; }
