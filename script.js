@@ -27,12 +27,13 @@ function getToken()    { return localStorage.getItem('td_access_token'); }
 
 async function loadCurrentUser() {
   const token = localStorage.getItem('td_access_token');
-  if (!token) return;
+  if (!token) { console.log('[Auth] No token found'); return; }
   try {
     const user = await apiCall('GET', '/users/profile', null, true);
     currentUser = user;
+    console.log('[Auth] Logged in as:', user.email, '| Status:', user.subscriptionStatus);
   } catch (e) {
-    // Token expired or invalid — clear it
+    console.log('[Auth] Token invalid, clearing:', e.message);
     localStorage.removeItem('td_access_token');
     localStorage.removeItem('td_refresh_token');
     currentUser = null;
@@ -72,7 +73,7 @@ function switchAuthTab(tab) {
 
 function showAuthError(msg) {
   const el = document.getElementById('authError');
-  el.textContent = msg;
+  el.innerHTML = msg;
   el.style.display = 'block';
 }
 
