@@ -362,12 +362,80 @@ function updateSizeDropdown(pickerEl, sizeEl) {
     sizeEl.appendChild(opt);
   });
 
+  // Custom option
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = 'Custom...';
+  sizeEl.appendChild(customOpt);
+
   const preferred = filtered.find(b => b.key === '32') || filtered[0];
   if (preferred) sizeEl.value = preferred.key;
 
   // Show rotation dropdown for oval and rectangle
   const rotEl = document.getElementById('baseRotation');
   if (rotEl) rotEl.style.display = (shape === 'oval' || shape === 'rectangle') ? 'inline-block' : 'none';
+
+  // Handle custom selection
+  sizeEl.onchange = () => {
+    if (sizeEl.value === 'custom') handleCustomBaseSize(sizeEl, pickerEl);
+  };
+}
+
+async function handleCustomBaseSize(sizeEl, pickerEl) {
+  const activeBtn = pickerEl?.querySelector('.shape-btn.active');
+  const shape     = activeBtn?.dataset.shape || 'circle';
+
+  let prompt;
+  if (shape === 'circle') {
+    prompt = await modalPrompt('Custom Base Size', 'Enter diameter in mm (e.g. 45):', '', '45');
+  } else {
+    prompt = await modalPrompt('Custom Base Size', 'Enter dimensions in mm as W×H (e.g. 80×52):', '', '80×52');
+  }
+
+  if (!prompt || !prompt.trim()) {
+    // Revert to first valid option
+    const first = sizeEl.querySelector('option:not([value="custom"])');
+    if (first) sizeEl.value = first.value;
+    return;
+  }
+
+  const input = prompt.trim().replace('x', '×');
+  let w, h, key;
+
+  if (shape === 'circle') {
+    w = parseInt(input);
+    h = w;
+    if (isNaN(w) || w <= 0) { modalAlert('Invalid', 'Please enter a number.'); sizeEl.value = sizeEl.options[0].value; return; }
+    key = `custom_${w}c`;
+  } else {
+    const parts = input.split('×').map(p => parseInt(p.trim()));
+    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+      modalAlert('Invalid', 'Please enter dimensions as W×H e.g. 80×52.');
+      sizeEl.value = sizeEl.options[0].value;
+      return;
+    }
+    [w, h] = parts;
+    const suffix = shape === 'oval' ? 'o' : 'r';
+    key = `custom_${w}x${h}${suffix}`;
+  }
+
+  // Add to BASE_SIZES if not already there
+  if (!BASE_SIZES.find(b => b.key === key)) {
+    BASE_SIZES.push({ key, w, h, shape });
+  }
+
+  // Add option to dropdown and select it
+  const existing = sizeEl.querySelector(`option[value="${key}"]`);
+  if (!existing) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    const dimStr = w === h ? `${w}mm` : `${w}×${h}mm`;
+    opt.textContent = `${dimStr} ✱`;
+    // Insert before Custom...
+    const customOpt = sizeEl.querySelector('option[value="custom"]');
+    sizeEl.insertBefore(opt, customOpt);
+  }
+  sizeEl.value = key;
 }
 
 function buildShapePicker(currentShape, onShapeChange) {
@@ -522,16 +590,7 @@ function drawModelGroup(group, isEditing) {
 
   // Label
   if (group.label) {
-    const cx   = group.bases.reduce((s, b) => s + b.x, 0) / group.bases.length;
-    const minY = Math.min(...group.bases.map(b => b.y)) - Math.max(rw, rh) - 14;
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(group.label).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(cx - tw / 2 - 5, minY - 9, tw + 10, 18);
-    ctx.fillStyle = group.color;
-    ctx.fillText(group.label, cx, minY);
+    // Label drawn separately in drawModelGroupLabel for correct z-order
   }
 
   // Edit mode indicator + rotation handle
@@ -581,6 +640,41 @@ function drawModelGroup(group, isEditing) {
       }
     }
   }
+}
+
+function drawModelGroupLabel(group, isEditing) {
+  if (!group.label) return;
+  const sz  = getBaseSize(group.baseSizeKey || '32');
+  const rw  = mmToPx(sz.w) / 2;
+  const rh  = mmToPx(sz.h) / 2;
+  const cx  = group.bases.reduce((s, b) => s + b.x, 0) / group.bases.length;
+  const minY = Math.min(...group.bases.map(b => b.y)) - Math.max(rw, rh) - 14;
+
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(group.label).width;
+  const lx = cx - tw / 2 - 5;
+  const ly = minY - 9;
+  const lw = tw + 10;
+  const lh = 18;
+  const r  = 4;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.50)';
+  ctx.beginPath();
+  ctx.moveTo(lx + r, ly);
+  ctx.lineTo(lx + lw - r, ly);
+  ctx.arcTo(lx + lw, ly, lx + lw, ly + r, r);
+  ctx.lineTo(lx + lw, ly + lh - r);
+  ctx.arcTo(lx + lw, ly + lh, lx + lw - r, ly + lh, r);
+  ctx.lineTo(lx + r, ly + lh);
+  ctx.arcTo(lx, ly + lh, lx, ly + lh - r, r);
+  ctx.lineTo(lx, ly + r);
+  ctx.arcTo(lx, ly, lx + r, ly, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = group.color;
+  ctx.fillText(group.label, cx, minY);
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -729,7 +823,7 @@ function parseNewRecruit(text) {
     if (/^total\s*points?/i.test(line) || /^\d+\s*\/\s*\d+\s*pts/i.test(line)) continue;
 
     // "10x Unit Name (pts)" or "[10]x Unit Name (pts)" or "Unit Name (pts)"
-    const unitMatch = line.match(/^(?:\[?(\d+)\]?x\s+)?(.+?)\s*\((\d+)\s*(?:pts?)?\)$/i);
+    const unitMatch = line.match(/^(?:\[?(\d+)\]?x\s+)?(.+?)\s*\((\d+)\s*(?:pts?)?\).*$/i);
     if (unitMatch) {
       const count    = parseInt(unitMatch[1] || '1');
       const name     = unitMatch[2].trim();
@@ -922,10 +1016,31 @@ function buildReviewRow(unit, i) {
     const opt    = document.createElement('option');
     opt.value    = bs.key;
     const dimStr = bs.w === bs.h ? `${bs.w}mm` : `${bs.w}×${bs.h}mm`;
-    opt.textContent = dimStr;
+    opt.textContent = bs.key.startsWith('custom_') ? dimStr + ' ✱' : dimStr;
     if (bs.key === unit.baseSizeKey) opt.selected = true;
     sizeSelect.appendChild(opt);
   });
+
+  // Custom option
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = 'Custom...';
+  sizeSelect.appendChild(customOpt);
+
+  sizeSelect.onchange = () => {
+    if (sizeSelect.value === 'custom') {
+      handleCustomBaseSize(sizeSelect, pickerEl).then(() => {
+        // If a custom size was added, make sure it's in the dropdown
+        if (sizeSelect.value !== 'custom') {
+          const match = BASE_SIZES.find(b => b.key === sizeSelect.value);
+          if (match) {
+            pendingList.units[i].baseSizeKey = match.key;
+            pendingList.units[i].shape = match.shape;
+          }
+        }
+      });
+    }
+  };
   tdBase.appendChild(sizeSelect);
 
   // Confidence indicator
@@ -1011,13 +1126,19 @@ function renderStagingArea() {
   }
 
   const totalPts = importedList.units.reduce((s, u) => s + u.points, 0);
-  hint.textContent = `${importedList.faction}${importedList.detachment ? ' · ' + importedList.detachment : ''} · ${totalPts}pts`;
+  const remaining = stagingUnits.filter(u => u.deploymentState !== 'deployed').length;
+  const total = stagingUnits.length;
+  const deployedStr = remaining < total ? ` · ${total - remaining}/${total} deployed` : '';
+  hint.textContent = `${importedList.faction}${importedList.detachment ? ' · ' + importedList.detachment : ''} · ${totalPts}pts${deployedStr}`;
   clearBtn.style.display = 'inline-block';
 
   stagingUnits.forEach(unit => {
+    // Hide deployed units — they're on the board now
+    if (unit.deploymentState === 'deployed') return;
+
     const pill = document.createElement('div');
-    pill.className = 'staging-pill' + (unit.deploymentState === 'deployed' ? ' deployed' : '');
-    pill.draggable = unit.deploymentState !== 'deployed';
+    pill.className = 'staging-pill';
+    pill.draggable = true;
     pill.dataset.unitId = unit.unitId;
 
     const color = CATEGORY_COLORS[unit.category] || CATEGORY_COLORS.other;
@@ -1052,22 +1173,23 @@ function renderStagingArea() {
     }
 
     // Drag events
-    if (unit.deploymentState !== 'deployed') {
-      pill.addEventListener('dragstart', e => {
-        draggingPill = unit;
-        pill.classList.add('dragging-pill');
-        e.dataTransfer.effectAllowed = 'move';
-        document.getElementById('canvasWrapper').classList.add('drop-active');
-      });
-      pill.addEventListener('dragend', () => {
-        pill.classList.remove('dragging-pill');
-        draggingPill = null;
-        document.getElementById('canvasWrapper').classList.remove('drop-active');
-      });
-    }
+    pill.addEventListener('dragstart', e => {
+      draggingPill = unit;
+      pill.classList.add('dragging-pill');
+      e.dataTransfer.effectAllowed = 'move';
+      document.getElementById('canvasWrapper').classList.add('drop-active');
+    });
+    pill.addEventListener('dragend', () => {
+      pill.classList.remove('dragging-pill');
+      draggingPill = null;
+      document.getElementById('canvasWrapper').classList.remove('drop-active');
+    });
 
     container.appendChild(pill);
   });
+
+  // Recalculate canvas after DOM reflow
+  setTimeout(() => { resizeCanvas(); drawScene(); }, 50);
 }
 
 function setupCanvasDropZone() {
@@ -1179,6 +1301,11 @@ async function init() {
   selectTool('models');
   updateSaveLoadButtons();
   drawScene();
+
+  // Watch staging area height changes and resize canvas accordingly
+  const stagingObserver = new ResizeObserver(() => { resizeCanvas(); drawScene(); });
+  const stagingEl = document.getElementById('stagingArea');
+  if (stagingEl) stagingObserver.observe(stagingEl);
 
   // Handle Stripe success/cancel redirect
   const params = new URLSearchParams(window.location.search);
@@ -1741,6 +1868,12 @@ function drawObjectives() {
 
 
 function drawUserDrawings() {
+  // Pass 1 — draw modelGroup labels first (bottom layer)
+  drawings.forEach((drawing, i) => {
+    if (drawing.type === 'modelGroup') drawModelGroupLabel(drawing, i === modelsEditingIndex);
+  });
+
+  // Pass 2 — draw everything else on top (bases always above labels)
   drawings.forEach((drawing, i) => {
     if      (drawing.type === 'unit')       drawUnit(drawing);
     else if (drawing.type === 'measure')    drawMeasure(drawing);
@@ -2229,12 +2362,28 @@ function updateUnitsList() {
     item.appendChild(lbl);
     item.appendChild(badge);
     item.appendChild(del);
+
+    // Left click — select all bases in this group
     item.onclick = ev => {
       if (ev.target === del) return;
-      modalPrompt('Edit Unit', 'Enter unit name:', d.label || 'Unit', 'Unit name...').then(n => {
+      if (d.type === 'modelGroup') {
+        modelsEditingIndex = i;
+        modelsSelectedBases = new Set(d.bases.map((_, bi) => bi));
+        selectTool('models');
+        drawScene();
+      }
+    };
+
+    // Right click — rename
+    item.oncontextmenu = ev => {
+      ev.preventDefault();
+      modalPrompt('Rename Unit', 'Enter unit name:', d.label || 'Unit', 'Unit name...').then(n => {
         if (n !== null && n.trim()) { drawings[i].label = n.trim(); drawScene(); updateUnitsList(); }
       });
     };
+
+    // Tooltip hint
+    item.title = 'Click to select all • Right-click to rename';
     list.appendChild(item);
   });
 }

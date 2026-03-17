@@ -414,7 +414,7 @@ input[type="text"]::placeholder { color: #555; }
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  max-height: 130px;
+  max-height: 30vh;
 }
 
 .staging-header {
@@ -446,12 +446,14 @@ input[type="text"]::placeholder { color: #555; }
 
 .staging-units {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 8px 12px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
-  align-items: center;
+  align-items: flex-start;
+  align-content: flex-start;
 }
 
 .staging-units:empty::after {
