@@ -1,4 +1,6 @@
 // ─── API Config ───────────────────────────────────────────────────────────────
+const SIGNUPS_ENABLED = false; // Set to true when SES production access approved
+const SIGNUP_PAUSED_MSG = 'Signups are temporarily paused while we resolve an email verification issue. Login is unaffected. We\'ll be back shortly — apologies for the inconvenience!';
 const API_URL = 'https://7mszujxl65.execute-api.us-west-2.amazonaws.com/prod';
 
 async function apiCall(method, path, body = null, requiresAuth = false) {
@@ -65,8 +67,17 @@ function closeAuthModal() {
 
 function switchAuthTab(tab) {
   document.getElementById('loginForm').style.display  = tab === 'login'  ? 'block' : 'none';
-  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
   document.getElementById('verifyForm').style.display = 'none';
+
+  if (tab === 'signup' && !SIGNUPS_ENABLED) {
+    document.getElementById('signupForm').style.display = 'none';
+    showAuthError(SIGNUP_PAUSED_MSG);
+    document.getElementById('loginTab').classList.toggle('active', false);
+    document.getElementById('signupTab').classList.toggle('active', true);
+    return;
+  }
+
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
   document.getElementById('loginTab').classList.toggle('active',  tab === 'login');
   document.getElementById('signupTab').classList.toggle('active', tab === 'signup');
   clearAuthError();
@@ -1471,19 +1482,29 @@ function updateNavAuth() {
     loginBtn.textContent = 'Log In';
     loginBtn.onclick = () => openAuthModal('login');
 
-    const signupBtn = document.createElement('button');
-    signupBtn.className = 'nav-btn nav-btn-signup';
-    signupBtn.textContent = 'Sign Up';
-    signupBtn.onclick = () => openAuthModal('signup');
-
-    const proBtn = document.createElement('button');
-    proBtn.className = 'nav-btn nav-btn-pro';
-    proBtn.textContent = '⚡ Go Pro';
-    proBtn.onclick = goPro;
-
     area.appendChild(loginBtn);
-    area.appendChild(signupBtn);
-    area.appendChild(proBtn);
+
+    if (SIGNUPS_ENABLED) {
+      const signupBtn = document.createElement('button');
+      signupBtn.className = 'nav-btn nav-btn-signup';
+      signupBtn.textContent = 'Sign Up';
+      signupBtn.onclick = () => openAuthModal('signup');
+      area.appendChild(signupBtn);
+
+      const proBtn = document.createElement('button');
+      proBtn.className = 'nav-btn nav-btn-pro';
+      proBtn.textContent = '⚡ Go Pro';
+      proBtn.onclick = goPro;
+      area.appendChild(proBtn);
+    } else {
+      const pausedBtn = document.createElement('button');
+      pausedBtn.className = 'nav-btn nav-btn-signup';
+      pausedBtn.textContent = 'Sign Up (coming back soon)';
+      pausedBtn.style.opacity = '0.5';
+      pausedBtn.style.cursor = 'default';
+      pausedBtn.onclick = () => modalAlert('Signups Temporarily Paused', SIGNUP_PAUSED_MSG);
+      area.appendChild(pausedBtn);
+    }
 
   } else if (!isPro()) {
     // Logged in free — show email + Go Pro
