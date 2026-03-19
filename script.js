@@ -1,6 +1,7 @@
 // ─── API Config ───────────────────────────────────────────────────────────────
-const SIGNUPS_ENABLED = false; // Set to true when SES production access approved
+const SIGNUPS_ENABLED = true; // Set to true when SES production access approved
 const SIGNUP_PAUSED_MSG = 'Signups are temporarily paused while we resolve an email verification issue. Login is unaffected. We\'ll be back shortly — apologies for the inconvenience!';
+const TERRAIN_OVERLAY_ENABLED = false; // Set to true when terrain JSON files are ready for production
 const API_URL = 'https://7mszujxl65.execute-api.us-west-2.amazonaws.com/prod';
 
 async function apiCall(method, path, body = null, requiresAuth = false) {
@@ -156,13 +157,24 @@ async function submitSignup() {
   }
 }
 
+async function resendVerifyCode(e) {
+  e.preventDefault();
+  if (!_pendingVerifyEmail) return showAuthError('Please sign up first.');
+  try {
+    await apiCall('POST', '/users/resend-verification', { email: _pendingVerifyEmail });
+    showAuthError('✅ New code sent — check your email.');
+    document.getElementById('authError').style.color = '#64dc64';
+  } catch (err) {
+    showAuthError('Could not resend code. Please try again.');
+  }
+}
+
 async function submitVerify() {
   const code = document.getElementById('verifyCode').value.trim();
   if (!code) return showAuthError('Enter the verification code from your email.');
 
   try {
     await apiCall('POST', '/users/verify', { email: _pendingVerifyEmail, code });
-    // Auto-login after verify
     showAuthError('✅ Email verified! You can now log in.');
     document.getElementById('authError').style.background = 'rgba(100,220,100,0.1)';
     document.getElementById('authError').style.borderColor = 'rgba(100,220,100,0.3)';
@@ -170,7 +182,14 @@ async function submitVerify() {
     document.getElementById('authError').style.display = 'block';
     setTimeout(() => switchAuthTab('login'), 1500);
   } catch (e) {
-    showAuthError(e.message);
+    const msg = e.message || '';
+    if (msg.includes('ExpiredCode') || msg.includes('expired')) {
+      showAuthError('Code expired — click "Resend code" to get a new one.');
+    } else if (msg.includes('CodeMismatch') || msg.includes('mismatch')) {
+      showAuthError('Incorrect code — please check your email and try again.');
+    } else {
+      showAuthError('Verification failed. Try resending the code.');
+    }
   }
 }
 
@@ -730,6 +749,39 @@ let gwImagesLoaded = 0;
 let wtcImage    = null;
 let wtcImageSrc = null;
 let hiddenSupplies = false;
+
+// Terrain overlay data
+let terrainOverlay     = null;
+let terrainOverlaySrc  = null;
+let svgDefs            = null; // loaded once from data/terrain/svgDefs.json
+
+async function loadSvgDefs() {
+  if (svgDefs) return; // already loaded
+  try {
+    const res = await fetch('data/terrain/svgDefs.json');
+    if (res.ok) svgDefs = await res.json();
+  } catch (e) {
+    console.warn('[Terrain] Could not load svgDefs.json:', e.message);
+  }
+}
+
+async function loadTerrainOverlay() {
+  if (currentTerrainFormat !== 'gw') { terrainOverlay = null; terrainOverlaySrc = null; drawScene(); return; }
+  const src = `data/terrain/gw-l${currentLayoutIndex + 1}.json`;
+  if (src === terrainOverlaySrc && terrainOverlay) { drawScene(); return; }
+  terrainOverlaySrc = src;
+  terrainOverlay = null;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    terrainOverlay = await res.json();
+    console.log(`[Terrain] Loaded ${src} — ${terrainOverlay.pieces.length} pieces`);
+  } catch (e) {
+    console.warn(`[Terrain] Could not load ${src}:`, e.message);
+    terrainOverlay = null;
+  }
+  drawScene();
+}
 
 function loadWtcImage() {
   if (currentTerrainFormat !== 'wtc' || !currentMission) { wtcImage = null; drawScene(); return; }
@@ -1313,6 +1365,10 @@ async function init() {
   initToolbarShapePicker();
   selectTool('models');
   updateSaveLoadButtons();
+  if (TERRAIN_OVERLAY_ENABLED) {
+    await loadSvgDefs();
+    await loadTerrainOverlay();
+  }
   drawScene();
 
   // Watch staging area height changes and resize canvas accordingly
@@ -1455,6 +1511,7 @@ function buildNav() {
   feedback.href = 'mailto:nwimmer123@yahoo.com?subject=TacticalDropz Feedback';
   feedback.className = 'nav-link';
   feedback.textContent = '📧 Feedback';
+  feedback.title = 'nwimmer123@yahoo.com';
   nav.appendChild(feedback);
 
   // Divider before auth
@@ -1712,16 +1769,17 @@ function selectTerrainFormat(format) {
   updateHsToggle(document.getElementById('leftSidebar'));
   updateHsToggle(document.getElementById('mobileMenu'));
   if (format === 'wtc') loadWtcImage();
+  else if (TERRAIN_OVERLAY_ENABLED) loadTerrainOverlay();
   else drawScene();
 }
 
 function selectLayout(index) {
   currentLayoutIndex = index;
-  // Update active state in sidebar grid
   document.querySelectorAll('.layout-btn').forEach((b, i) => {
     b.classList.toggle('active', i === index);
   });
   if (currentTerrainFormat === 'wtc') loadWtcImage();
+  else if (TERRAIN_OVERLAY_ENABLED) loadTerrainOverlay();
   else drawScene();
 }
 
@@ -1784,12 +1842,19 @@ function drawScene() {
   drawGrid();
   drawDeploymentZones();
   drawObjectives();
+  if (TERRAIN_OVERLAY_ENABLED) drawTerrainOverlay();
   drawUserDrawings();
   drawInProgressPoints();
 }
 
 function drawBackground() {
   if (currentTerrainFormat === 'gw') {
+    if (terrainOverlay) {
+      // Terrain overlay replaces the image — use a neutral board color
+      ctx.fillStyle = '#2a3448';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
     const img = terrainImages[currentLayoutIndex];
     if (img && img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -1800,14 +1865,12 @@ function drawBackground() {
     ctx.drawImage(wtcImage, 0, 0, canvas.width, canvas.height);
     return;
   }
-  // Blank board
-  ctx.fillStyle = '#1a2030';
+  ctx.fillStyle = '#efefef';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 function drawGrid() {
-  // 1" grid = 15px
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= canvas.width; x += IPX) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
@@ -1815,8 +1878,7 @@ function drawGrid() {
   for (let y = 0; y <= canvas.height; y += IPX) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
-  // 6" major grid lines slightly brighter
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
   ctx.lineWidth = 0.75;
   for (let x = 0; x <= canvas.width; x += IPX * 6) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
@@ -1889,6 +1951,124 @@ function drawObjectives() {
   });
 }
 
+
+function drawTerrainOverlay() {
+  if (!terrainOverlay || currentTerrainFormat !== 'gw') return;
+
+  // Draw terrain piece footprints
+  terrainOverlay.pieces.forEach(p => {
+    const x  = i2p(p.x);
+    const y  = i2p(p.y);
+    const w  = i2p(p.w);
+    const h  = i2p(p.h);
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rot = (p.rot || 0) * Math.PI / 180;
+
+    let fillColor, strokeColor, lineWidth;
+    if (p.type === 'small') {
+      fillColor   = 'rgba(80,140,255,0.20)';
+      strokeColor = 'rgba(80,140,255,1)';
+      lineWidth   = 2;
+    } else if (p.type === 'big') {
+      fillColor   = 'rgba(200,200,200,0.15)';
+      strokeColor = 'rgba(200,200,200,0.9)';
+      lineWidth   = 2;
+    } else {
+      fillColor   = 'rgba(255,255,255,0.10)';
+      strokeColor = 'rgba(255,255,255,0.6)';
+      lineWidth   = 2;
+    }
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, h);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Draw ruins as SVG paths (coordinates already in board inches)
+  if (terrainOverlay.ruins) {
+    terrainOverlay.ruins.forEach(r => {
+      const tokens = r.d.trim().split(/\s+/);
+      ctx.beginPath();
+      let i = 0;
+      while (i < tokens.length) {
+        const cmd = tokens[i];
+        if (cmd === 'M' || cmd === 'L') {
+          const x = i2p(parseFloat(tokens[i + 1]));
+          const y = i2p(parseFloat(tokens[i + 2]));
+          cmd === 'M' ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          i += 3;
+        } else if (cmd === 'C') {
+          const x1 = i2p(parseFloat(tokens[i+1])), y1 = i2p(parseFloat(tokens[i+2]));
+          const x2 = i2p(parseFloat(tokens[i+3])), y2 = i2p(parseFloat(tokens[i+4]));
+          const x  = i2p(parseFloat(tokens[i+5])), y  = i2p(parseFloat(tokens[i+6]));
+          ctx.bezierCurveTo(x1, y1, x2, y2, x, y);
+          i += 7;
+        } else if (cmd === 'Z') {
+          ctx.closePath();
+          i++;
+        } else {
+          i++;
+        }
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,210,0,0.20)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,210,0,1)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+  }
+
+  // Draw markers using global svgDefs
+  if (terrainOverlay.markers && svgDefs) {
+    terrainOverlay.markers.forEach(m => {
+      const svgContent = svgDefs[m.type];
+      if (!svgContent) return;
+      const cx   = i2p(m.cx);
+      const cy   = i2p(m.cy);
+      const size = Math.max(i2p(m.r) * 2, 16);
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    });
+  }
+}
+
+function parseSVGPath(d) {
+  const cmds = [];
+  const tokens = d.trim().split(/\s+/);
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (t === 'M') {
+      cmds.push({ type: 'M', x: parseFloat(tokens[i+1]), y: parseFloat(tokens[i+2]) });
+      i += 3;
+    } else if (t === 'C') {
+      cmds.push({ type: 'C', x1: parseFloat(tokens[i+1]), y1: parseFloat(tokens[i+2]), x2: parseFloat(tokens[i+3]), y2: parseFloat(tokens[i+4]), x: parseFloat(tokens[i+5]), y: parseFloat(tokens[i+6]) });
+      i += 7;
+    } else if (t === 'Z') {
+      cmds.push({ type: 'Z' });
+      i += 1;
+    } else {
+      i += 1;
+    }
+  }
+  return cmds;
+}
 
 function drawUserDrawings() {
   // Pass 1 — draw modelGroup labels first (bottom layer)

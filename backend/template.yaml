@@ -19,7 +19,7 @@ Globals:
         SES_FROM_EMAIL: "noreply@tacticaldropz.com"
         APP_URL: "https://tacticaldropz.com"
         STRIPE_PRICE_LOOKUP_KEY: "TacticalDropzPro-c005ef8"
-        STRIPE_PRICE_ID: "price_1TBPlrR4Uvswi4uSqDy9oFwp"
+        STRIPE_PRICE_ID: "price_1TBNDBJ5WyJzEPimrIQGyEIW"
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -38,6 +38,10 @@ Resources:
         - email
       UsernameAttributes:
         - email
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        From: noreply@tacticaldropz.com
+        SourceArn: !Sub "arn:aws:ses:us-west-2:${AWS::AccountId}:identity/tacticaldropz.com"
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -215,6 +219,12 @@ Resources:
           Type: Api
           Properties:
             Path: /users/forgot-password
+            Method: post
+            RestApiId: !Ref ApiGateway
+        ResendVerification:
+          Type: Api
+          Properties:
+            Path: /users/resend-verification
             Method: post
             RestApiId: !Ref ApiGateway
         SignIn:

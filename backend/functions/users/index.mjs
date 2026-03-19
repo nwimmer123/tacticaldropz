@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { randomUUID } from 'crypto';
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -25,6 +25,19 @@ export const handler = async (event) => {
   const body   = event.body ? JSON.parse(event.body) : {};
 
   try {
+
+    // ── POST /users/resend-verification ────────────────────────────────────
+    if (method === 'POST' && path.endsWith('/resend-verification')) {
+      const { email } = body;
+      if (!email) return response(400, { error: 'Email required' });
+
+      await cognito.send(new ResendConfirmationCodeCommand({
+        ClientId: CLIENT_ID,
+        Username: email,
+      }));
+
+      return response(200, { message: 'Verification code resent' });
+    }
 
     // ── POST /users/forgot-password ────────────────────────────────────────
     if (method === 'POST' && path.endsWith('/forgot-password')) {
@@ -166,10 +179,14 @@ export const handler = async (event) => {
     return response(404, { error: 'Route not found' });
 
   } catch (err) {
-    console.error(err);
-    if (err.name === 'UsernameExistsException') return response(409, { error: 'Email already registered' });
-    if (err.name === 'NotAuthorizedException')  return response(401, { error: 'Invalid email or password' });
-    if (err.name === 'UserNotConfirmedException') return response(403, { error: 'Please verify your email first' });
-    return response(500, { error: 'Internal server error' });
+    console.error('Lambda error:', err.name, err.message, JSON.stringify(err));
+    if (err.name === 'UsernameExistsException')    return response(409, { error: 'Email already registered. Try logging in instead.' });
+    if (err.name === 'NotAuthorizedException')     return response(401, { error: 'Invalid email or password' });
+    if (err.name === 'UserNotConfirmedException')  return response(403, { error: 'Please verify your email first' });
+    if (err.name === 'InvalidPasswordException')   return response(400, { error: 'Password must be 8+ characters with uppercase, lowercase and a number.' });
+    if (err.name === 'InvalidParameterException')  return response(400, { error: err.message });
+    if (err.name === 'TooManyRequestsException')   return response(429, { error: 'Too many attempts. Please wait a moment and try again.' });
+    if (err.name === 'LimitExceededException')     return response(429, { error: 'Too many attempts. Please wait a moment and try again.' });
+    return response(500, { error: `Server error: ${err.name} — ${err.message}` });
   }
 };
