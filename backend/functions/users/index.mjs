@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand, AdminDeleteUserCommand, ConfirmForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { randomUUID } from 'crypto';
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -8,6 +8,7 @@ const cognito = new CognitoIdentityProviderClient({});
 
 const USERS_TABLE      = process.env.USERS_TABLE;
 const CLIENT_ID        = process.env.USER_POOL_CLIENT_ID;
+const USER_POOL_ID     = process.env.USER_POOL_ID;
 
 const response = (statusCode, body) => ({
   statusCode,
@@ -51,6 +52,21 @@ export const handler = async (event) => {
 
       // Always return success to avoid user enumeration
       return response(200, { message: 'If that email exists, a reset code has been sent.' });
+    }
+
+    // ── POST /users/confirm-reset-password ──────────────────────────────────
+    if (method === 'POST' && path.endsWith('/confirm-reset-password')) {
+      const { email, code, password } = body;
+      if (!email || !code || !password) return response(400, { error: 'Email, code and password required' });
+
+      await cognito.send(new ConfirmForgotPasswordCommand({
+        ClientId:         CLIENT_ID,
+        Username:         email,
+        ConfirmationCode: code,
+        Password:         password,
+      }));
+
+      return response(200, { message: 'Password reset successfully' });
     }
 
     // ── POST /users/verify ──────────────────────────────────────────────────
