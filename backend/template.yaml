@@ -207,6 +207,12 @@ Resources:
               Action:
                 - cognito-idp:AdminDeleteUser
               Resource: !GetAtt UserPool.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tacticaldropz/stripe/*"
       Events:
         SignUp:
           Type: Api
@@ -224,6 +230,12 @@ Resources:
           Type: Api
           Properties:
             Path: /users/forgot-password
+            Method: post
+            RestApiId: !Ref ApiGateway
+        ConfirmResetPassword:
+          Type: Api
+          Properties:
+            Path: /users/confirm-reset-password
             Method: post
             RestApiId: !Ref ApiGateway
         ResendVerification:

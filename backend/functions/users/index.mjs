@@ -1,10 +1,13 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand, AdminDeleteUserCommand, ConfirmForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
 
-const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const cognito = new CognitoIdentityProviderClient({});
+const dynamo     = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const cognito    = new CognitoIdentityProviderClient({});
+const ssmClient  = new SSMClient({});
 
 const USERS_TABLE      = process.env.USERS_TABLE;
 const CLIENT_ID        = process.env.USER_POOL_CLIENT_ID;
@@ -217,11 +220,27 @@ export const handler = async (event) => {
       const userId = event.requestContext?.authorizer?.claims?.sub;
       if (!userId) return response(401, { error: 'Unauthorized' });
 
-      // Get user email for Cognito deletion
       const userResult = await dynamo.send(new GetCommand({
         TableName: USERS_TABLE,
         Key: { userId },
       }));
+
+      const user = userResult.Item;
+
+      // Cancel Stripe subscription if Pro
+      if (user?.stripeSubscriptionId) {
+        try {
+          const ssmResult = await ssmClient.send(new GetParameterCommand({
+            Name: '/tacticaldropz/stripe/secret_key',
+            WithDecryption: true,
+          }));
+          const stripe = new Stripe(ssmResult.Parameter.Value);
+          await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+        } catch (stripeErr) {
+          console.error('Stripe cancellation error:', stripeErr.message);
+          // Continue with deletion even if Stripe fails
+        }
+      }
 
       // Delete from DynamoDB
       await dynamo.send(new DeleteCommand({
@@ -230,7 +249,7 @@ export const handler = async (event) => {
       }));
 
       // Delete from Cognito
-      const email = userResult.Item?.email;
+      const email = user?.email;
       if (email) {
         await cognito.send(new AdminDeleteUserCommand({
           UserPoolId: USER_POOL_ID,

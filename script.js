@@ -134,7 +134,7 @@ async function sendPasswordReset(e) {
   if (!email) return showAuthError('Enter your email address above first.');
   try {
     await apiCall('POST', '/users/forgot-password', { email });
-    // Show the reset form to enter code + new password
+    _pendingVerifyEmail = email; // store for submitResetPassword
     document.getElementById('loginForm').style.display = 'none';
     document.getElementById('resetForm').style.display = 'block';
     clearAuthError();
@@ -145,10 +145,11 @@ async function sendPasswordReset(e) {
 }
 
 async function submitResetPassword() {
-  const email    = document.getElementById('loginEmail').value.trim();
+  const email    = _pendingVerifyEmail || document.getElementById('loginEmail').value.trim();
   const code     = document.getElementById('resetCode').value.trim();
   const password = document.getElementById('resetPassword').value;
 
+  if (!email)    return showAuthError('Could not determine email address — please close and try again.');
   if (!code)     return showAuthError('Enter the reset code from your email.');
   if (!password) return showAuthError('Enter a new password.');
 
@@ -158,16 +159,17 @@ async function submitResetPassword() {
     document.getElementById('authError').style.color = '#64dc64';
     document.getElementById('resetForm').style.display = 'none';
     document.getElementById('loginForm').style.display = 'block';
+    _pendingVerifyEmail = null;
   } catch (e) {
     const msg = e.message || '';
     if (msg.includes('ExpiredCode') || msg.includes('expired')) {
       showAuthError('Code expired — go back and request a new one.');
     } else if (msg.includes('CodeMismatch')) {
       showAuthError('Incorrect code — check your email and try again.');
-    } else if (msg.includes('InvalidPassword')) {
+    } else if (msg.includes('InvalidPassword') || msg.includes('password')) {
       showAuthError('Password must be 8+ characters with uppercase, lowercase and a number.');
     } else {
-      showAuthError('Could not reset password. Please try again.');
+      showAuthError(`Reset failed: ${msg}`);
     }
   }
 }
