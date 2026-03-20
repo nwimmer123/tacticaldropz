@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ResendConfirmationCodeCommand, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { randomUUID } from 'crypto';
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -141,6 +141,7 @@ export const handler = async (event) => {
     // ── GET /users/profile ──────────────────────────────────────────────────
     if (method === 'GET' && path.endsWith('/profile')) {
       const userId = event.requestContext?.authorizer?.claims?.sub;
+      const email  = event.requestContext?.authorizer?.claims?.email;
       if (!userId) return response(401, { error: 'Unauthorized' });
 
       const result = await dynamo.send(new GetCommand({
@@ -148,7 +149,26 @@ export const handler = async (event) => {
         Key: { userId },
       }));
 
-      if (!result.Item) return response(404, { error: 'User not found' });
+      // Auto-create record if missing (e.g. signed up during outage)
+      if (!result.Item) {
+        const newUser = {
+          userId,
+          email: email || 'unknown',
+          subscriptionStatus: 'free',
+          stripeCustomerId: null,
+          subscriptionExpiry: null,
+          theme: 'default',
+          schemaVersion: '1.0',
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+        await dynamo.send(new PutCommand({
+          TableName: USERS_TABLE,
+          Item: newUser,
+        }));
+        const { stripeCustomerId: _, ...safeNewUser } = newUser;
+        return response(200, safeNewUser);
+      }
 
       // Never return sensitive fields
       const { stripeCustomerId, ...safeUser } = result.Item;
@@ -174,6 +194,35 @@ export const handler = async (event) => {
       }));
 
       return response(200, { message: 'Profile updated' });
+    }
+
+    // ── DELETE /users/account ────────────────────────────────────────────────
+    if (method === 'DELETE' && path.endsWith('/account')) {
+      const userId = event.requestContext?.authorizer?.claims?.sub;
+      if (!userId) return response(401, { error: 'Unauthorized' });
+
+      // Get user email for Cognito deletion
+      const userResult = await dynamo.send(new GetCommand({
+        TableName: USERS_TABLE,
+        Key: { userId },
+      }));
+
+      // Delete from DynamoDB
+      await dynamo.send(new DeleteCommand({
+        TableName: USERS_TABLE,
+        Key: { userId },
+      }));
+
+      // Delete from Cognito
+      const email = userResult.Item?.email;
+      if (email) {
+        await cognito.send(new AdminDeleteUserCommand({
+          UserPoolId: USER_POOL_ID,
+          Username:   email,
+        }));
+      }
+
+      return response(200, { message: 'Account deleted' });
     }
 
     return response(404, { error: 'Route not found' });

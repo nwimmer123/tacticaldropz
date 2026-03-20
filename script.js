@@ -69,6 +69,7 @@ function closeAuthModal() {
 function switchAuthTab(tab) {
   document.getElementById('loginForm').style.display  = tab === 'login'  ? 'block' : 'none';
   document.getElementById('verifyForm').style.display = 'none';
+  document.getElementById('resetForm').style.display  = 'none';
 
   if (tab === 'signup' && !SIGNUPS_ENABLED) {
     document.getElementById('signupForm').style.display = 'none';
@@ -133,10 +134,41 @@ async function sendPasswordReset(e) {
   if (!email) return showAuthError('Enter your email address above first.');
   try {
     await apiCall('POST', '/users/forgot-password', { email });
-    showAuthError('✅ Password reset email sent. Check your inbox.');
-    document.getElementById('authError').style.color = '#64dc64';
+    // Show the reset form to enter code + new password
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('resetForm').style.display = 'block';
+    clearAuthError();
+    document.getElementById('resetCode').focus();
   } catch (err) {
     showAuthError('Could not send reset email. Please try again.');
+  }
+}
+
+async function submitResetPassword() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const code     = document.getElementById('resetCode').value.trim();
+  const password = document.getElementById('resetPassword').value;
+
+  if (!code)     return showAuthError('Enter the reset code from your email.');
+  if (!password) return showAuthError('Enter a new password.');
+
+  try {
+    await apiCall('POST', '/users/confirm-reset-password', { email, code, password });
+    showAuthError('✅ Password updated! You can now log in.');
+    document.getElementById('authError').style.color = '#64dc64';
+    document.getElementById('resetForm').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
+  } catch (e) {
+    const msg = e.message || '';
+    if (msg.includes('ExpiredCode') || msg.includes('expired')) {
+      showAuthError('Code expired — go back and request a new one.');
+    } else if (msg.includes('CodeMismatch')) {
+      showAuthError('Incorrect code — check your email and try again.');
+    } else if (msg.includes('InvalidPassword')) {
+      showAuthError('Password must be 8+ characters with uppercase, lowercase and a number.');
+    } else {
+      showAuthError('Could not reset password. Please try again.');
+    }
   }
 }
 
@@ -215,6 +247,26 @@ async function goPro() {
     window.location.href = data.url;
   } catch (e) {
     modalAlert('Error', e.message);
+  }
+}
+
+async function confirmDeleteAccount() {
+  const confirmed = await showModal({
+    title: '⚠️ Delete Account',
+    body: `<p>This will permanently delete your account, all saved deployments, and cancel any active subscription.</p><p style="margin-top:10px;color:#e94560;font-weight:600;">This cannot be undone.</p>`,
+    buttons: [
+      { label: 'Cancel',         style: 'modal-btn-secondary', value: false  },
+      { label: 'Delete Account', style: 'modal-btn-danger',    value: true   },
+    ]
+  });
+  if (!confirmed) return;
+
+  try {
+    await apiCall('DELETE', '/users/account', null, true);
+    logout();
+    modalAlert('Account Deleted', 'Your account and all associated data have been deleted.');
+  } catch (e) {
+    modalAlert('Error', 'Could not delete account: ' + e.message);
   }
 }
 
@@ -1568,7 +1620,20 @@ function updateNavAuth() {
     const emailSpan = document.createElement('span');
     emailSpan.className = 'nav-user-email';
     emailSpan.textContent = currentUser.email;
-    emailSpan.onclick = () => modalConfirm('Account', `Logged in as ${currentUser.email}`, 'Log Out', false).then(ok => { if (ok) logout(); });
+    emailSpan.onclick = () => {
+      showModal({
+        title: 'Account',
+        body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: Free</p>`,
+        buttons: [
+          { label: 'Delete Account', style: 'modal-btn-danger',    value: 'delete' },
+          { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout' },
+          { label: 'Close',          style: 'modal-btn-primary',   value: 'close'  },
+        ]
+      }).then(v => {
+        if (v === 'logout') logout();
+        if (v === 'delete') confirmDeleteAccount();
+      });
+    };
 
     const proBtn = document.createElement('button');
     proBtn.className = 'nav-btn nav-btn-pro';
@@ -1598,12 +1663,14 @@ function updateNavAuth() {
         body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: <strong style="color:#64dc64">Pro ⚡</strong></p>`,
         buttons: [
           { label: 'Manage Billing', style: 'modal-btn-secondary', value: 'billing' },
+          { label: 'Delete Account', style: 'modal-btn-danger',    value: 'delete'  },
           { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout'  },
           { label: 'Close',          style: 'modal-btn-primary',   value: 'close'   },
         ]
       }).then(v => {
         if (v === 'logout')  logout();
         if (v === 'billing') openBillingPortal();
+        if (v === 'delete')  confirmDeleteAccount();
       });
     };
 

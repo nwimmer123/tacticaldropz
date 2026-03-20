@@ -142,7 +142,17 @@
         <input type="password" id="signupPassword" class="auth-input" placeholder="Password" autocomplete="new-password">
         <button type="submit" class="modal-btn modal-btn-primary auth-submit">Create Account</button>
         <div class="auth-footer">Free to use · No credit card required</div>
+        <div class="auth-footer" style="margin-top:6px;">By signing up you agree to our <a href="privacy.html" target="_blank" style="color:#4ecdc4">Privacy Policy</a> and <a href="terms.html" target="_blank" style="color:#4ecdc4">Terms of Service</a></div>
         </form>
+      </div>
+
+      <div id="resetForm" style="display:none">
+        <div class="auth-verify-msg">Enter the code from your email and choose a new password.</div>
+        <label class="auth-label">Reset Code</label>
+        <input type="text" id="resetCode" class="auth-input" placeholder="123456" style="letter-spacing:4px; text-align:center;" autocomplete="one-time-code">
+        <label class="auth-label">New Password <span class="auth-hint">8+ chars, upper, lower, number</span></label>
+        <input type="password" id="resetPassword" class="auth-input" placeholder="New password" autocomplete="new-password">
+        <button class="modal-btn modal-btn-primary auth-submit" onclick="submitResetPassword()">Set New Password</button>
       </div>
 
       <div id="verifyForm" style="display:none">
