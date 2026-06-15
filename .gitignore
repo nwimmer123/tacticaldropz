@@ -20,3 +20,7 @@ Thumbs.db
 
 # VSCode
 .vscode/
+
+# Bulk email logs (contain user PII)
+backend/scripts/bulk-email/*.sent.json
+backend/scripts/bulk-email/*.failed.json

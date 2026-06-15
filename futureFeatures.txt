@@ -16,3 +16,9 @@ later
 - support other games
 - user log in, so you can save your layouts on the cloud and see them again when you open on another device
 - mobile phone view mode
+
+11th edition layouts (data-driven, not image files)
+- "setup toggle" mode: show (x,y) corner coordinates for every terrain piece corner, since official instructions often only give one corner
+- click a corner of the table to set it as the origin, so as you walk around the table you can re-origin and get easier measurements from wherever you're standing
+- note: cannot apply to old (10th ed) layout sets since those are just image files with no stored terrain coordinates
+- once your Force Disposition is set, let users cycle through all possible opponent disposition combos to pre-plan a deployment for each, with an easy way to bring saved plans back up (potential pro-tier feature, since saving multiple plans suits paid accounts)
