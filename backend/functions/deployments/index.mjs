@@ -32,7 +32,7 @@ export const handler = async (event) => {
         KeyConditionExpression: 'userId = :uid',
         ExpressionAttributeValues: { ':uid': userId },
         // Summary only for list view — excludes heavy boardData
-        ProjectionExpression: 'deploymentId, #n, faction, mission, terrainFormat, layoutIndex, listId, edition, opponent, #result, tournamentRound, createdAt, updatedAt',
+        ProjectionExpression: 'deploymentId, #n, faction, mission, terrainFormat, layoutIndex, listId, edition, layoutEdition, myDisposition, oppDisposition, e11LayoutLetter, opponent, #result, tournamentRound, createdAt, updatedAt',
         ExpressionAttributeNames: { '#n': 'name', '#result': 'result' },
       }));
 
@@ -58,9 +58,25 @@ export const handler = async (event) => {
         opponent = null, result = null, tournamentRound = null,
         isPublic = false,
         theme = null,
+        // Force-Disposition (11th edition) nav state. layoutEdition distinguishes
+        // this from `edition` above (the army-list rules edition -- unrelated
+        // concept, coincidentally similar name). Absent/'10e' means the classic
+        // Format/Mission/Layout(1-8) fields above are what matter, same as every
+        // pre-existing deployment in the table.
+        layoutEdition = '10e',
+        myDisposition = null,
+        oppDisposition = null,
+        e11LayoutLetter = null,
       } = body;
 
-      if (!name || !mission) return response(400, { error: 'name and mission required' });
+      if (!name) return response(400, { error: 'name required' });
+      if (layoutEdition === '11e') {
+        if (!myDisposition || !oppDisposition) {
+          return response(400, { error: 'myDisposition and oppDisposition required for 11e deployments' });
+        }
+      } else if (!mission) {
+        return response(400, { error: 'mission required' });
+      }
 
       const newDeploymentId = randomUUID();
       const now = new Date().toISOString();
@@ -72,18 +88,22 @@ export const handler = async (event) => {
           deploymentId:  newDeploymentId,
           name,
           faction:       faction || null,
-          mission,
+          mission:       mission || null,
           terrainFormat: terrainFormat || 'gw',
           layoutIndex:   layoutIndex   || 0,
           boardData:     boardData      || [],
           listId:        listId         || null,
           edition,
+          layoutEdition,
+          myDisposition,
+          oppDisposition,
+          e11LayoutLetter,
           opponent,
           result,
           tournamentRound,
           isPublic,
           theme,
-          schemaVersion: '1.0',
+          schemaVersion: '1.1',
           createdAt:     now,
           updatedAt:     now,
         },

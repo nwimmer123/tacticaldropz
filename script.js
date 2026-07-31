@@ -809,6 +809,23 @@ let terrainOverlay     = null;
 let terrainOverlaySrc  = null;
 let svgDefs            = null; // loaded once from data/terrain/svgDefs.json
 
+// 11e (11th edition) layout data
+let e11Layout    = null;
+let e11LayoutSrc = null;
+
+// Edition + 11e disposition-picker state
+let currentEdition      = '11e'; // '11e' | '10e' — 11e is default
+let myDisposition        = null;
+let oppDisposition       = null;
+let e11LayoutLetter      = null; // 'A' | 'B' | 'C' — null until explicitly picked
+let dispositionMissions  = null; // loaded manifest, data/dispositionMissions.json
+
+function findDispositionPairing(a, b) {
+  if (!dispositionMissions) return null;
+  return dispositionMissions.pairings.find(p =>
+    (p.a === a && p.b === b) || (p.a === b && p.b === a)) || null;
+}
+
 async function loadSvgDefs() {
   if (svgDefs) return; // already loaded
   try {
@@ -858,6 +875,28 @@ function loadWtcImage() {
     } else { wtcImage = null; drawScene(); }
   };
   img.src = src;
+}
+
+async function loadE11Layout() {
+  if (currentEdition !== '11e' || !myDisposition || !oppDisposition || !e11LayoutLetter) {
+    e11Layout = null; e11LayoutSrc = null; drawScene(); return;
+  }
+  const pairing = findDispositionPairing(myDisposition, oppDisposition);
+  const src = pairing ? pairing.layouts[e11LayoutLetter] : null;
+  if (!src) { e11Layout = null; e11LayoutSrc = null; drawScene(); return; }
+  if (src === e11LayoutSrc && e11Layout) { drawScene(); return; }
+  e11LayoutSrc = src;
+  e11Layout = null;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    e11Layout = await res.json();
+    console.log(`[11e] Loaded ${src} — ${e11Layout.pieces.length} pieces, ${e11Layout.objectives.length} objectives`);
+  } catch (e) {
+    console.warn(`[11e] Could not load ${src}:`, e.message);
+    e11Layout = null;
+  }
+  drawScene();
 }
 
 function updateHsToggleVisibility() {
@@ -1407,6 +1446,7 @@ function restoreListFromStorage() {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function init() {
   await loadDeployments();
+  await loadDispositionMissions();
   loadGwImages();
   await loadCurrentUser();   // load auth state before building nav
   buildNav();
@@ -1419,8 +1459,8 @@ async function init() {
   initToolbarShapePicker();
   selectTool('models');
   updateSaveLoadButtons();
+  await loadSvgDefs(); // needed for 11e objective icons (and GW terrain-overlay markers when enabled)
   if (TERRAIN_OVERLAY_ENABLED) {
-    await loadSvgDefs();
     await loadTerrainOverlay();
   }
   drawScene();
@@ -1455,6 +1495,18 @@ async function loadDeployments() {
     deployments = FALLBACK_DEPLOYMENTS;
   }
   currentMission = deployments[0] || null;
+}
+
+async function loadDispositionMissions() {
+  try {
+    const res = await fetch('data/dispositionMissions.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    dispositionMissions = await res.json();
+    console.log(`[11e] Loaded disposition manifest — ${dispositionMissions.pairings.length} pairings`);
+  } catch (e) {
+    console.warn('[11e] Could not load dispositionMissions.json:', e.message);
+    dispositionMissions = { dispositions: [], pairings: [] };
+  }
 }
 
 // ─── Fallback Deployment Data (used if fetch fails) ───────────────────────────
@@ -1694,62 +1746,81 @@ function buildMissionSidebar() {
   const sidebar = document.getElementById('leftSidebar');
   sidebar.innerHTML = '';
 
-  // ── FORMAT ──
-  const fmtHeader = document.createElement('div');
-  fmtHeader.className = 'sidebar-header';
-  fmtHeader.textContent = 'Format';
-  sidebar.appendChild(fmtHeader);
+  // ── EDITION ──
+  const editionHeader = document.createElement('div');
+  editionHeader.className = 'sidebar-header';
+  editionHeader.textContent = 'Edition';
+  sidebar.appendChild(editionHeader);
 
-  const formats = [
-    { value: 'gw',   label: 'GW' },
-    { value: 'wtc',  label: 'WTC' },
-    { value: 'uktc', label: 'UKTC (soon)' },
-  ];
-  formats.forEach(fmt => {
+  [{ value: '11e', label: '11th' }, { value: '10e', label: '10th' }].forEach(ed => {
     const opt = document.createElement('div');
-    opt.className = 'deploy-option' + (currentTerrainFormat === fmt.value ? ' active' : '');
-    opt.dataset.format = fmt.value;
-    opt.textContent = fmt.label;
+    opt.className = 'deploy-option' + (currentEdition === ed.value ? ' active' : '');
+    opt.textContent = ed.label;
     opt.onclick = () => {
-      sidebar.querySelectorAll('[data-format]').forEach(o => o.classList.remove('active'));
-      opt.classList.add('active');
-      selectTerrainFormat(fmt.value);
-      buildLayoutGrid(sidebar);
+      selectEdition(ed.value);
+      buildMissionSidebar();
     };
     sidebar.appendChild(opt);
   });
 
-  // ── MISSION ──
-  const missionHeader = document.createElement('div');
-  missionHeader.className = 'sidebar-header';
-  missionHeader.textContent = 'Mission';
-  sidebar.appendChild(missionHeader);
+  if (currentEdition === '11e') {
+    buildE11PickerSections(sidebar, 'sidebar-header', 'deploy-option', 'div', buildMissionSidebar);
+  } else {
+    // ── FORMAT ──
+    const fmtHeader = document.createElement('div');
+    fmtHeader.className = 'sidebar-header';
+    fmtHeader.textContent = 'Format';
+    sidebar.appendChild(fmtHeader);
 
-  deployments.forEach(mission => {
-    const opt = document.createElement('div');
-    opt.className = 'deploy-option' + (mission === currentMission ? ' active' : '');
-    opt.textContent = mission.name;
-    opt.dataset.id = mission.id;
-    opt.onclick = () => {
-      sidebar.querySelectorAll('[data-id]').forEach(o => o.classList.remove('active'));
-      opt.classList.add('active');
-      selectMission(mission.id);
-      updateHsToggle(sidebar);
-    };
-    sidebar.appendChild(opt);
-  });
+    const formats = [
+      { value: 'gw',   label: 'GW' },
+      { value: 'wtc',  label: 'WTC' },
+      { value: 'uktc', label: 'UKTC (soon)' },
+    ];
+    formats.forEach(fmt => {
+      const opt = document.createElement('div');
+      opt.className = 'deploy-option' + (currentTerrainFormat === fmt.value ? ' active' : '');
+      opt.dataset.format = fmt.value;
+      opt.textContent = fmt.label;
+      opt.onclick = () => {
+        selectTerrainFormat(fmt.value);
+        buildMissionSidebar();
+      };
+      sidebar.appendChild(opt);
+    });
 
-  // ── LAYOUT ──
-  const layoutHeader = document.createElement('div');
-  layoutHeader.className = 'sidebar-header';
-  layoutHeader.textContent = 'Layout';
-  sidebar.appendChild(layoutHeader);
+    // ── MISSION ──
+    const missionHeader = document.createElement('div');
+    missionHeader.className = 'sidebar-header';
+    missionHeader.textContent = 'Mission';
+    sidebar.appendChild(missionHeader);
 
-  const layoutGrid = document.createElement('div');
-  layoutGrid.id = 'sidebarLayoutGrid';
-  layoutGrid.className = 'sidebar-layout-grid';
-  sidebar.appendChild(layoutGrid);
-  buildLayoutGrid(sidebar);
+    deployments.forEach(mission => {
+      const opt = document.createElement('div');
+      opt.className = 'deploy-option' + (mission === currentMission ? ' active' : '');
+      opt.textContent = mission.name;
+      opt.dataset.id = mission.id;
+      opt.onclick = () => {
+        sidebar.querySelectorAll('[data-id]').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        selectMission(mission.id);
+        updateHsToggle(sidebar);
+      };
+      sidebar.appendChild(opt);
+    });
+
+    // ── LAYOUT ──
+    const layoutHeader = document.createElement('div');
+    layoutHeader.className = 'sidebar-header';
+    layoutHeader.textContent = 'Layout';
+    sidebar.appendChild(layoutHeader);
+
+    const layoutGrid = document.createElement('div');
+    layoutGrid.id = 'sidebarLayoutGrid';
+    layoutGrid.className = 'sidebar-layout-grid';
+    sidebar.appendChild(layoutGrid);
+    buildLayoutGrid(sidebar);
+  }
 
   // ── OPTIONS / Hidden Supplies ──
   const hsWrapper = document.createElement('label');
@@ -1791,6 +1862,78 @@ function buildLayoutGrid(container) {
     };
     grid.appendChild(btn);
   }
+}
+
+// ── 11e: My Disposition / Opponent Disposition / Layout(A-C) picker ──────────
+// Shared between the desktop sidebar and the mobile menu; `elementTag` picks
+// 'div' (desktop, matches .deploy-option) or 'button' (mobile, matches
+// .mobile-menu-btn), matching how Format/Mission already differ between the
+// two builders.
+function buildE11PickerSections(container, headerClass, optionClass, elementTag, rebuildFn) {
+  const dispositions = (dispositionMissions && dispositionMissions.dispositions) || [];
+
+  const makeHeader = text => {
+    const h = document.createElement('div');
+    h.className = headerClass;
+    h.textContent = text;
+    container.appendChild(h);
+  };
+  const makeOption = (text, active, onclick) => {
+    const opt = document.createElement(elementTag);
+    opt.className = optionClass + (active ? ' active' : '');
+    opt.textContent = text;
+    opt.onclick = onclick;
+    container.appendChild(opt);
+  };
+
+  // ── MY DISPOSITION ──
+  makeHeader('My Disposition');
+  dispositions.forEach(d => {
+    makeOption(d.label, myDisposition === d.id, () => { selectMyDisposition(d.id); rebuildFn(); });
+  });
+
+  // ── OPPONENT DISPOSITION ──
+  makeHeader('Opponent Disposition');
+  dispositions.forEach(d => {
+    makeOption(d.label, oppDisposition === d.id, () => { selectOppDisposition(d.id); rebuildFn(); });
+  });
+
+  // ── LAYOUT ──
+  makeHeader('Layout');
+  const layoutGrid = document.createElement('div');
+  layoutGrid.className = 'sidebar-layout-grid';
+  container.appendChild(layoutGrid);
+  buildE11LayoutGrid(container);
+
+  // ── MISSION (read-only readout) ──
+  makeHeader('Mission');
+  const pairing = (myDisposition && oppDisposition) ? findDispositionPairing(myDisposition, oppDisposition) : null;
+  let missionText = 'Select both dispositions';
+  if (pairing) {
+    const mine = pairing.a === myDisposition ? pairing.missionA : pairing.missionB;
+    missionText = e11LayoutLetter ? `${mine.name} — Layout ${e11LayoutLetter}` : `${mine.name} — pick a layout`;
+  }
+  makeOption(missionText, true, null);
+}
+
+function buildE11LayoutGrid(container) {
+  const grid = container.querySelector('.sidebar-layout-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const pairing = (myDisposition && oppDisposition) ? findDispositionPairing(myDisposition, oppDisposition) : null;
+  ['A', 'B', 'C'].forEach(letter => {
+    const btn = document.createElement('button');
+    const enabled = !!(pairing && pairing.layouts[letter]);
+    btn.className = 'layout-btn' + (e11LayoutLetter === letter ? ' active' : '');
+    btn.textContent = letter;
+    btn.disabled = !enabled;
+    btn.onclick = () => {
+      grid.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectE11LayoutLetter(letter);
+    };
+    grid.appendChild(btn);
+  });
 }
 
 function updateHsToggle(container) {
@@ -1852,6 +1995,22 @@ function selectLayout(index) {
   else drawScene();
 }
 
+function selectEdition(edition) {
+  currentEdition = edition;
+  if (edition === '11e') {
+    loadE11Layout(); // clears/no-ops until all 3 picks (my/opp/layout) exist
+  } else {
+    e11Layout = null; e11LayoutSrc = null;
+    if (currentTerrainFormat === 'wtc') loadWtcImage();
+    else if (TERRAIN_OVERLAY_ENABLED) loadTerrainOverlay();
+    else drawScene();
+  }
+}
+
+function selectMyDisposition(id)  { myDisposition = id;  loadE11Layout(); }
+function selectOppDisposition(id) { oppDisposition = id; loadE11Layout(); }
+function selectE11LayoutLetter(letter) { e11LayoutLetter = letter; loadE11Layout(); }
+
 function selectMission(id) {
   currentMission = deployments.find(d => d.id === id);
   document.querySelectorAll('[data-id]').forEach(o => {
@@ -1911,12 +2070,21 @@ function drawScene() {
   drawGrid();
   drawDeploymentZones();
   drawObjectives();
-  if (TERRAIN_OVERLAY_ENABLED) drawTerrainOverlay();
+  if (TERRAIN_OVERLAY_ENABLED && currentEdition !== '11e') drawTerrainOverlay();
+  if (currentEdition === '11e' && e11Layout) drawE11Layout();
   drawUserDrawings();
   drawInProgressPoints();
 }
 
 function drawBackground() {
+  if (currentEdition === '11e') {
+    // 11e draws its own board via drawE11Layout(); just lay down a neutral
+    // fill here so the old gw/wtc art (currentTerrainFormat is untouched
+    // while in this edition) doesn't paint underneath it.
+    ctx.fillStyle = '#2a3448';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
   if (currentTerrainFormat === 'gw') {
     if (terrainOverlay) {
       // Terrain overlay replaces the image — use a neutral board color
@@ -1958,6 +2126,7 @@ function drawGrid() {
 }
 
 function drawDeploymentZones() {
+  if (currentEdition === '11e') return;
   if (!currentMission) return;
   currentMission.zones.forEach(zone => {
     ctx.beginPath();
@@ -1982,6 +2151,7 @@ function drawDeploymentZones() {
 }
 
 function drawObjectives() {
+  if (currentEdition === '11e') return;
   if (!currentMission) return;
   if (currentTerrainFormat === 'wtc' && wtcImage) return;
   // 40mm base = 1.57" radius. Zone extends 3" from base edge = 4.57" total radius.
@@ -2110,6 +2280,92 @@ function drawTerrainOverlay() {
       const img  = new Image();
       img.onload = () => {
         ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    });
+  }
+}
+
+// ─── 11e (11th edition) Layout Rendering ───────────────────────────────────────
+// The 11e board (44"x60", portrait) does not match the fixed 900x660 canvas's
+// legacy 60"x44" orientation, so it gets its own fit-to-canvas scale/offset
+// rather than the shared IPX-based i2p(). Path data (`d`) is already absolute
+// board inches (flattened at export time), using the same M/L/C/Z syntax as
+// the existing `ruins[].d` convention.
+function drawE11Path(d, transform, fillStyle, strokeStyle, lineWidth) {
+  const tokens = d.trim().split(/\s+/);
+  ctx.beginPath();
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i];
+    if (cmd === 'M' || cmd === 'L') {
+      const [x, y] = transform(parseFloat(tokens[i + 1]), parseFloat(tokens[i + 2]));
+      cmd === 'M' ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      i += 3;
+    } else if (cmd === 'C') {
+      const [x1, y1] = transform(parseFloat(tokens[i + 1]), parseFloat(tokens[i + 2]));
+      const [x2, y2] = transform(parseFloat(tokens[i + 3]), parseFloat(tokens[i + 4]));
+      const [x, y]   = transform(parseFloat(tokens[i + 5]), parseFloat(tokens[i + 6]));
+      ctx.bezierCurveTo(x1, y1, x2, y2, x, y);
+      i += 7;
+    } else if (cmd === 'Z') {
+      ctx.closePath();
+      i++;
+    } else {
+      i++;
+    }
+  }
+  ctx.closePath();
+  if (fillStyle) { ctx.fillStyle = fillStyle; ctx.fill(); }
+  if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth || 1; ctx.stroke(); }
+}
+
+function drawE11Layout() {
+  if (!e11Layout) return;
+  const scale = Math.min(canvas.width / e11Layout.boardWidth, canvas.height / e11Layout.boardHeight);
+  const offsetX = (canvas.width - e11Layout.boardWidth * scale) / 2;
+  const offsetY = (canvas.height - e11Layout.boardHeight * scale) / 2;
+  const tx = (x, y) => [x * scale + offsetX, y * scale + offsetY];
+
+  (e11Layout.zones || []).forEach(zone => {
+    ctx.beginPath();
+    zone.points.forEach(([x, y], i) => {
+      const [px, py] = tx(x, y);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fillStyle = zone.color;
+    ctx.fill();
+    ctx.strokeStyle = zone.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  (e11Layout.areas || []).forEach(area => {
+    drawE11Path(area.d, tx, 'rgba(140,140,140,0.55)', 'rgba(20,20,20,0.8)', 1.5);
+  });
+
+  (e11Layout.pieces || []).forEach(piece => {
+    const fill   = piece.terrainType === 'dense' ? 'rgba(40,140,100,0.85)'  : 'rgba(255,210,0,0.85)';
+    const stroke = piece.terrainType === 'dense' ? 'rgba(20,90,60,1)'      : 'rgba(180,140,0,1)';
+    drawE11Path(piece.d, tx, fill, stroke, 1);
+  });
+
+  if (svgDefs) {
+    (e11Layout.objectives || []).forEach(obj => {
+      let iconKey = 'objCentral';
+      if (obj.type === 'home') iconKey = obj.owner === 2 ? 'objHomeBlue' : 'objHomeRed';
+      else if (obj.type === 'expansion') iconKey = 'objExpansion';
+      const svgContent = svgDefs[iconKey];
+      if (!svgContent) return;
+      const [cx, cy] = tx(obj.x, obj.y);
+      const size = 3 * scale; // ~3" icon diameter
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
         URL.revokeObjectURL(url);
       };
       img.src = url;
@@ -2722,7 +2978,14 @@ async function saveDeployment() {
       faction:       importedList?.faction || null,
       terrainFormat: currentTerrainFormat,
       layoutIndex:   currentLayoutIndex,
-      edition:       importedList?.edition || '10th',
+      edition:       importedList?.edition || '10th', // army-list rules edition, unrelated to layoutEdition below
+      // Force-Disposition (11th edition) nav state — layoutEdition distinguishes this
+      // from the older Format/Mission/Layout(1-8) state above. Only populated when
+      // relevant so old-style saves stay clean.
+      layoutEdition:   currentEdition,
+      myDisposition:   currentEdition === '11e' ? myDisposition : null,
+      oppDisposition:  currentEdition === '11e' ? oppDisposition : null,
+      e11LayoutLetter: currentEdition === '11e' ? e11LayoutLetter : null,
       boardData:     drawings,
     };
     await apiCall('POST', '/deployments', payload, true);
@@ -2780,7 +3043,13 @@ function renderDeploymentsList(deployments) {
     const meta = document.createElement('div');
     meta.className = 'deployment-item-meta';
     const date = new Date(dep.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const parts = [dep.mission, dep.faction, date].filter(Boolean);
+    let missionLabel = dep.mission;
+    if (dep.layoutEdition === '11e' && dep.myDisposition && dep.oppDisposition) {
+      const dispositions = (dispositionMissions && dispositionMissions.dispositions) || [];
+      const label = id => dispositions.find(d => d.id === id)?.label || id;
+      missionLabel = `${label(dep.myDisposition)} vs ${label(dep.oppDisposition)}` + (dep.e11LayoutLetter ? ` — Layout ${dep.e11LayoutLetter}` : '');
+    }
+    const parts = [missionLabel, dep.faction, date].filter(Boolean);
     meta.textContent = parts.join(' · ');
 
     info.appendChild(name);
@@ -2817,11 +3086,23 @@ async function loadDeployment(deploymentId) {
   try {
     const dep = await apiCall('GET', `/deployments/${deploymentId}`, null, true);
 
-    if (dep.terrainFormat) selectTerrainFormat(dep.terrainFormat);
-    if (dep.mission) selectMission(dep.mission);
-    if (dep.layoutIndex !== undefined) selectLayout(dep.layoutIndex);
+    // layoutEdition is absent on saves made before the Edition selector existed —
+    // treat those as 10th, matching how they always behaved.
+    const layoutEdition = dep.layoutEdition || '10e';
+    selectEdition(layoutEdition);
+    if (layoutEdition === '11e') {
+      if (dep.myDisposition) selectMyDisposition(dep.myDisposition);
+      if (dep.oppDisposition) selectOppDisposition(dep.oppDisposition);
+      if (dep.e11LayoutLetter) selectE11LayoutLetter(dep.e11LayoutLetter);
+    } else {
+      if (dep.terrainFormat) selectTerrainFormat(dep.terrainFormat);
+      if (dep.mission) selectMission(dep.mission);
+      if (dep.layoutIndex !== undefined) selectLayout(dep.layoutIndex);
+    }
     drawings = dep.boardData || [];
     closeDeploymentsModal();
+    buildMissionSidebar(); // refresh nav highlighting to match the restored selections
+    buildMobileMenu();
     drawScene();
     updateUnitsList();
   } catch (e) {
@@ -2981,58 +3262,76 @@ function buildMobileMenu() {
     menu.appendChild(loadBtn);
   }
 
-  // ── FORMAT ──
-  const fmtHeader = document.createElement('div');
-  fmtHeader.className = 'mobile-section-header';
-  fmtHeader.textContent = 'Format';
-  menu.appendChild(fmtHeader);
+  // ── EDITION ──
+  const editionHeader = document.createElement('div');
+  editionHeader.className = 'mobile-section-header';
+  editionHeader.textContent = 'Edition';
+  menu.appendChild(editionHeader);
 
-  [{ value: 'gw', label: 'GW' }, { value: 'wtc', label: 'WTC' }, { value: 'uktc', label: 'UKTC (soon)' }].forEach(fmt => {
+  [{ value: '11e', label: '11th' }, { value: '10e', label: '10th' }].forEach(ed => {
     const btn = document.createElement('button');
-    btn.className = 'mobile-menu-btn' + (currentTerrainFormat === fmt.value ? ' active' : '');
-    btn.textContent = fmt.label;
-    btn.dataset.format = fmt.value;
+    btn.className = 'mobile-menu-btn' + (currentEdition === ed.value ? ' active' : '');
+    btn.textContent = ed.label;
     btn.onclick = () => {
-      menu.querySelectorAll('[data-format]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectTerrainFormat(fmt.value);
-      buildLayoutGrid(menu);
-      updateHsToggle(menu);
+      selectEdition(ed.value);
+      buildMobileMenu();
     };
     menu.appendChild(btn);
   });
 
-  // ── MISSION ──
-  const missionHeader = document.createElement('div');
-  missionHeader.className = 'mobile-section-header';
-  missionHeader.textContent = 'Mission';
-  menu.appendChild(missionHeader);
+  if (currentEdition === '11e') {
+    buildE11PickerSections(menu, 'mobile-section-header', 'mobile-menu-btn', 'button', buildMobileMenu);
+  } else {
+    // ── FORMAT ──
+    const fmtHeader = document.createElement('div');
+    fmtHeader.className = 'mobile-section-header';
+    fmtHeader.textContent = 'Format';
+    menu.appendChild(fmtHeader);
 
-  deployments.forEach(mission => {
-    const btn = document.createElement('button');
-    btn.className = 'mobile-menu-btn' + (mission === currentMission ? ' active' : '');
-    btn.textContent = mission.name;
-    btn.dataset.id = mission.id;
-    btn.onclick = () => {
-      menu.querySelectorAll('[data-id]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectMission(mission.id);
-      updateHsToggle(menu);
-    };
-    menu.appendChild(btn);
-  });
+    [{ value: 'gw', label: 'GW' }, { value: 'wtc', label: 'WTC' }, { value: 'uktc', label: 'UKTC (soon)' }].forEach(fmt => {
+      const btn = document.createElement('button');
+      btn.className = 'mobile-menu-btn' + (currentTerrainFormat === fmt.value ? ' active' : '');
+      btn.textContent = fmt.label;
+      btn.dataset.format = fmt.value;
+      btn.onclick = () => {
+        selectTerrainFormat(fmt.value);
+        buildMobileMenu();
+      };
+      menu.appendChild(btn);
+    });
 
-  // ── LAYOUT ──
-  const layoutHeader = document.createElement('div');
-  layoutHeader.className = 'mobile-section-header';
-  layoutHeader.textContent = 'Layout';
-  menu.appendChild(layoutHeader);
+    // ── MISSION ──
+    const missionHeader = document.createElement('div');
+    missionHeader.className = 'mobile-section-header';
+    missionHeader.textContent = 'Mission';
+    menu.appendChild(missionHeader);
 
-  const layoutGrid = document.createElement('div');
-  layoutGrid.id = 'mobileLayoutGrid';
-  layoutGrid.className = 'sidebar-layout-grid';
-  menu.appendChild(layoutGrid);
-  buildLayoutGrid(menu);
+    deployments.forEach(mission => {
+      const btn = document.createElement('button');
+      btn.className = 'mobile-menu-btn' + (mission === currentMission ? ' active' : '');
+      btn.textContent = mission.name;
+      btn.dataset.id = mission.id;
+      btn.onclick = () => {
+        menu.querySelectorAll('[data-id]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectMission(mission.id);
+        updateHsToggle(menu);
+      };
+      menu.appendChild(btn);
+    });
+
+    // ── LAYOUT ──
+    const layoutHeader = document.createElement('div');
+    layoutHeader.className = 'mobile-section-header';
+    layoutHeader.textContent = 'Layout';
+    menu.appendChild(layoutHeader);
+
+    const layoutGrid = document.createElement('div');
+    layoutGrid.id = 'mobileLayoutGrid';
+    layoutGrid.className = 'sidebar-layout-grid';
+    menu.appendChild(layoutGrid);
+    buildLayoutGrid(menu);
+  }
 
   // ── Hidden Supplies ──
   const hsWrapper = document.createElement('label');

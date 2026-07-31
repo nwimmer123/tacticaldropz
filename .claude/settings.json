@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"/c/Users/nxw05/Projects/tacticaldropz/scripts/11e\" && python 01_extract_sprites.py)",
+      "Bash(cd \"/c/Users/nxw05/Projects/tacticaldropz/scripts/11e\" && python 02_extract_page.py)",
+      "Bash(cd \"/c/Users/nxw05/Projects/tacticaldropz/scripts/11e\" && python 03_flatten_batch.py)",
+      "Bash(cd \"/c/Users/nxw05/Projects/tacticaldropz/scripts/11e\" && python 04_compare.py)"
+    ]
+  }
+}

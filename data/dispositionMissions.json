@@ -1,0 +1,281 @@
+{
+  "dispositions": [
+    {
+      "id": "takeAndHold",
+      "label": "Take and Hold"
+    },
+    {
+      "id": "purgeTheFoe",
+      "label": "Purge the Foe"
+    },
+    {
+      "id": "disruption",
+      "label": "Disruption"
+    },
+    {
+      "id": "reconnaissance",
+      "label": "Reconnaissance"
+    },
+    {
+      "id": "priorityAssets",
+      "label": "Priority Assets"
+    }
+  ],
+  "pairings": [
+    {
+      "a": "takeAndHold",
+      "b": "takeAndHold",
+      "missionA": {
+        "id": "battlefieldDominance",
+        "name": "Battlefield Dominance"
+      },
+      "missionB": {
+        "id": "battlefieldDominance",
+        "name": "Battlefield Dominance"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/battlefieldDominance-A.json",
+        "B": "data/terrain/11e/takeAndHold-takeAndHold-B.json",
+        "C": "data/terrain/11e/takeAndHold-takeAndHold-C.json"
+      }
+    },
+    {
+      "a": "disruption",
+      "b": "disruption",
+      "missionA": {
+        "id": "outmanoeuvre",
+        "name": "Outmanoeuvre"
+      },
+      "missionB": {
+        "id": "outmanoeuvre",
+        "name": "Outmanoeuvre"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/disruption-disruption-A.json",
+        "B": "data/terrain/11e/disruption-disruption-B.json",
+        "C": "data/terrain/11e/disruption-disruption-C.json"
+      }
+    },
+    {
+      "a": "disruption",
+      "b": "priorityAssets",
+      "missionA": {
+        "id": "locateAndDeny",
+        "name": "Locate and Deny"
+      },
+      "missionB": {
+        "id": "extractRelic",
+        "name": "Extract Relic"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/disruption-priorityAssets-A.json",
+        "B": "data/terrain/11e/disruption-priorityAssets-B.json",
+        "C": "data/terrain/11e/disruption-priorityAssets-C.json"
+      }
+    },
+    {
+      "a": "disruption",
+      "b": "reconnaissance",
+      "missionA": {
+        "id": "smokeAndMirrors",
+        "name": "Smoke and Mirrors"
+      },
+      "missionB": {
+        "id": "surveilTheFoe",
+        "name": "Surveil the Foe"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/disruption-reconnaissance-A.json",
+        "B": "data/terrain/11e/disruption-reconnaissance-B.json",
+        "C": "data/terrain/11e/disruption-reconnaissance-C.json"
+      }
+    },
+    {
+      "a": "priorityAssets",
+      "b": "priorityAssets",
+      "missionA": {
+        "id": "sabotage",
+        "name": "Sabotage"
+      },
+      "missionB": {
+        "id": "sabotage",
+        "name": "Sabotage"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/priorityAssets-priorityAssets-A.json",
+        "B": "data/terrain/11e/priorityAssets-priorityAssets-B.json",
+        "C": "data/terrain/11e/priorityAssets-priorityAssets-C.json"
+      }
+    },
+    {
+      "a": "purgeTheFoe",
+      "b": "disruption",
+      "missionA": {
+        "id": "punishment",
+        "name": "Punishment"
+      },
+      "missionB": {
+        "id": "delayingAction",
+        "name": "Delaying Action"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/purgeTheFoe-disruption-A.json",
+        "B": "data/terrain/11e/purgeTheFoe-disruption-B.json",
+        "C": "data/terrain/11e/purgeTheFoe-disruption-C.json"
+      }
+    },
+    {
+      "a": "purgeTheFoe",
+      "b": "priorityAssets",
+      "missionA": {
+        "id": "destroyersWrath",
+        "name": "Destroyer\u2019s Wrath"
+      },
+      "missionB": {
+        "id": "vitalLink",
+        "name": "Vital Link"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/purgeTheFoe-priorityAssets-A.json",
+        "B": "data/terrain/11e/purgeTheFoe-priorityAssets-B.json",
+        "C": "data/terrain/11e/purgeTheFoe-priorityAssets-C.json"
+      }
+    },
+    {
+      "a": "purgeTheFoe",
+      "b": "purgeTheFoe",
+      "missionA": {
+        "id": "meatgrinder",
+        "name": "Meatgrinder"
+      },
+      "missionB": {
+        "id": "meatgrinder",
+        "name": "Meatgrinder"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/purgeTheFoe-purgeTheFoe-A.json",
+        "B": "data/terrain/11e/purgeTheFoe-purgeTheFoe-B.json",
+        "C": "data/terrain/11e/purgeTheFoe-purgeTheFoe-C.json"
+      }
+    },
+    {
+      "a": "purgeTheFoe",
+      "b": "reconnaissance",
+      "missionA": {
+        "id": "consecrate",
+        "name": "Consecrate"
+      },
+      "missionB": {
+        "id": "triangulation",
+        "name": "Triangulation"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/purgeTheFoe-reconnaissance-A.json",
+        "B": "data/terrain/11e/purgeTheFoe-reconnaissance-B.json",
+        "C": "data/terrain/11e/purgeTheFoe-reconnaissance-C.json"
+      }
+    },
+    {
+      "a": "reconnaissance",
+      "b": "priorityAssets",
+      "missionA": {
+        "id": "searchAndScour",
+        "name": "Search and Scour"
+      },
+      "missionB": {
+        "id": "vanguardOperation",
+        "name": "Vanguard Operation"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/reconnaissance-priorityAssets-A.json",
+        "B": "data/terrain/11e/reconnaissance-priorityAssets-B.json",
+        "C": "data/terrain/11e/reconnaissance-priorityAssets-C.json"
+      }
+    },
+    {
+      "a": "reconnaissance",
+      "b": "reconnaissance",
+      "missionA": {
+        "id": "gatherIntel",
+        "name": "Gather Intel"
+      },
+      "missionB": {
+        "id": "gatherIntel",
+        "name": "Gather Intel"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/reconnaissance-reconnaissance-A.json",
+        "B": "data/terrain/11e/reconnaissance-reconnaissance-B.json",
+        "C": "data/terrain/11e/reconnaissance-reconnaissance-C.json"
+      }
+    },
+    {
+      "a": "takeAndHold",
+      "b": "disruption",
+      "missionA": {
+        "id": "determinedAcquisition",
+        "name": "Determined Acquisition"
+      },
+      "missionB": {
+        "id": "deathTrap",
+        "name": "Death Trap"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/takeAndHold-disruption-A.json",
+        "B": "data/terrain/11e/takeAndHold-disruption-B.json",
+        "C": "data/terrain/11e/takeAndHold-disruption-C.json"
+      }
+    },
+    {
+      "a": "takeAndHold",
+      "b": "priorityAssets",
+      "missionA": {
+        "id": "inescapableDominion",
+        "name": "Inescapable Dominion"
+      },
+      "missionB": {
+        "id": "secureAsset",
+        "name": "Secure Asset"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/takeAndHold-priorityAssets-A.json",
+        "B": "data/terrain/11e/takeAndHold-priorityAssets-B.json",
+        "C": "data/terrain/11e/takeAndHold-priorityAssets-C.json"
+      }
+    },
+    {
+      "a": "takeAndHold",
+      "b": "purgeTheFoe",
+      "missionA": {
+        "id": "immovableObject",
+        "name": "Immovable Object"
+      },
+      "missionB": {
+        "id": "unstoppableForce",
+        "name": "Unstoppable Force"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/takeAndHold-purgeTheFoe-A.json",
+        "B": "data/terrain/11e/takeAndHold-purgeTheFoe-B.json",
+        "C": "data/terrain/11e/takeAndHold-purgeTheFoe-C.json"
+      }
+    },
+    {
+      "a": "takeAndHold",
+      "b": "reconnaissance",
+      "missionA": {
+        "id": "purgeAndSecure",
+        "name": "Purge and Secure"
+      },
+      "missionB": {
+        "id": "reconnaissanceSweep",
+        "name": "Reconnaissance Sweep"
+      },
+      "layouts": {
+        "A": "data/terrain/11e/takeAndHold-reconnaissance-A.json",
+        "B": "data/terrain/11e/takeAndHold-reconnaissance-B.json",
+        "C": "data/terrain/11e/takeAndHold-reconnaissance-C.json"
+      }
+    }
+  ]
+}

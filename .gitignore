@@ -24,3 +24,7 @@ Thumbs.db
 # Bulk email logs (contain user PII)
 backend/scripts/bulk-email/*.sent.json
 backend/scripts/bulk-email/*.failed.json
+
+# 11e PDF-extraction pipeline scratch/cache (regeneratable from Downloads/maps.pdf
+# via scripts/11e/0N_*.py -- not read by the app, just validation artifacts)
+scripts/11e/cache/
