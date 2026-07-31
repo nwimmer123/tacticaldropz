@@ -126,6 +126,17 @@ async function createPortal(userId) {
   return response(200, { url: session.url });
 }
 
+// Stripe API versions >= 2025-03-31 moved these fields; support both shapes.
+function getPeriodEnd(subscription) {
+  return subscription.current_period_end
+    ?? subscription.items?.data?.[0]?.current_period_end;
+}
+
+function getInvoiceSubscriptionId(invoice) {
+  return invoice.subscription
+    ?? invoice.parent?.subscription_details?.subscription;
+}
+
 // ── POST /stripe/webhook ──────────────────────────────────────────────────────
 
 async function handleWebhook(event) {
@@ -152,7 +163,7 @@ async function handleWebhook(event) {
       const userId = data.metadata?.userId;
       if (!userId) break;
       const subscription = await stripe.subscriptions.retrieve(data.subscription);
-      const expiry = new Date(subscription.current_period_end * 1000).toISOString();
+      const expiry = new Date(getPeriodEnd(subscription) * 1000).toISOString();
       await updateUserSubscription(userId, {
         subscriptionStatus:   'pro',
         subscriptionExpiry:   expiry,
@@ -165,8 +176,10 @@ async function handleWebhook(event) {
     case 'invoice.payment_succeeded': {
       const user = await getUserByEmail(data.customer_email);
       if (!user) break;
-      const subscription = await stripe.subscriptions.retrieve(data.subscription);
-      const expiry = new Date(subscription.current_period_end * 1000).toISOString();
+      const subId = getInvoiceSubscriptionId(data);
+      if (!subId) break;
+      const subscription = await stripe.subscriptions.retrieve(subId);
+      const expiry = new Date(getPeriodEnd(subscription) * 1000).toISOString();
       await updateUserSubscription(user.userId, {
         subscriptionStatus: 'pro',
         subscriptionExpiry: expiry,
@@ -198,7 +211,7 @@ async function handleWebhook(event) {
       const userId = data.metadata?.userId;
       if (!userId) break;
       const status = data.status === 'active' ? 'pro' : data.status;
-      const expiry = new Date(data.current_period_end * 1000).toISOString();
+      const expiry = new Date(getPeriodEnd(data) * 1000).toISOString();
       await updateUserSubscription(userId, {
         subscriptionStatus: status,
         subscriptionExpiry: expiry,
