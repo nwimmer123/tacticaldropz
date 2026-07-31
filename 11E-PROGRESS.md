@@ -6,7 +6,7 @@ Read this first when picking this back up. It's written so you don't have to re-
 
 Moving TacticalDropz from 10th-edition-style content (flat mission list, static objectives) to a new "11th edition" ruleset sourced from `Downloads/maps.pdf` (93 pages; page 8 is a legend, pages 9–53 are 45 map diagrams — 15 disposition pairings × 3 layouts each).
 
-**Mission selection changes**: each side picks one of 5 Force Dispositions (Take and Hold, Purge the Foe, Disruption, Reconnaissance, Priority Assets). The pairing determines the mission; each pairing has 3 layout variants (A/B/C). The Force Disposition dual-picker UI is **not built yet** — deliberately deferred until enough real data exists to back it (see "What's NOT done" below).
+**Mission selection changes**: each side picks one of 5 Force Dispositions (Take and Hold, Purge the Foe, Disruption, Reconnaissance, Priority Assets). The pairing determines the mission; each pairing has 3 layout variants (A/B/C). The Force Disposition dual-picker UI **is built now** — see "Edition selector + My/Opponent Disposition picker UI" section below.
 
 ## What's done and validated
 
@@ -183,15 +183,17 @@ persist, and the mobile hamburger menu specifically.
 
 ## What's NOT done yet (in order)
 
-1. **Manual browser verification of the new picker UI** (see note directly above).
-2. **Spot-check a few of pages 19-53 yourself** if you want them at the same confidence level as pages 9-18 — see the "Review depth by batch" note above for exactly what has/hasn't had human eyes on it. Not blocking, just a gap to know about.
+1. ~~Manual browser verification of the picker UI~~ — **done**, confirmed working: the user exercised Edition → My/Opponent Disposition → Layout end-to-end while testing LOS Area below (that requires the picker UI to work to even get a unit onto an 11e board).
+2. **Spot-check a few of pages 19-53 yourself** if you want them at the same confidence level as pages 9-18 — see the "Review depth by batch" note above for exactly what has/hasn't had human eyes on it. Not blocking, just a gap to know about. Still open, untouched this session.
 3. ~~Extract all 45 pages~~ — **done**, all 15 pairings × 3 layouts are in `data/terrain/11e/`.
 4. ~~Generalize `02_extract_page9_layoutA.py` and `03_flatten_for_app.py`~~ — **done**, see `02_extract_page.py` / `03_flatten_batch.py` / `04_compare.py` in "Pipeline scripts" above.
 5. ~~`data/dispositionMissions.json`~~ — **done**, see above.
-6. ~~The Force Disposition dual-picker UI~~ — **done**, see above (pending manual verification, item 1).
-7. ~~LOS raycasting feature~~ — **done**, see "LoS Area (11e-only visibility)" below. **Not manually verified in a browser** — user will validate in Chrome directly, same as the picker UI.
+6. ~~The Force Disposition dual-picker UI~~ — **done and browser-verified**, see item 1.
+7. ~~LOS raycasting feature~~ — **done and browser-tested through multiple real bug-fix rounds**, see "LoS Area (11e-only visibility)" below. User is about to push/commit this session's work (first time anything from the 11e effort has been committed — see "Untracked files" note, which will be stale the moment that happens).
 8. **Corner-coordinate "setup mode"** — also schema-supported (straight-line polygon vertices, not smooth curves) but not built.
 9. **Cleanup**: rename `battlefieldDominance-A.json` to `takeAndHold-takeAndHold-A.json` for filename consistency with the other 44 (optional, cosmetic — the manifest builder already absorbs this irregularity, so it's no longer blocking anything, purely cosmetic now).
+10. **Data-quality follow-up, not fixed**: `area.id`/`piece.featureId` in all 45 `data/terrain/11e/*.json` files are not unique (derived from nearest badge, not per-polygon identity — see the LOS "data-quality bug" note below for the full story). Client-side LOS code no longer depends on them, but if a future feature needs genuinely unique per-polygon ids, the extraction pipeline's id generation (`scripts/11e/02_extract_page.py`) would need a uniquifier and all 45 files would need regenerating.
+11. **LOS Area is single-shot/static only, not live during drag** — deliberate tradeoff (see below), not a bug. Worth reconsidering later if there's appetite for optimizing the geometry (spatial partitioning, memoization) to make live-follow-during-drag fast enough to bring back.
 
 ## LoS Area (11e-only visibility) — built this session
 
@@ -381,6 +383,18 @@ LOS code does), so the blast radius was fully contained by the client-side
 fix above — but worth knowing if a future feature ever needs genuinely
 unique per-polygon ids.
 
-## Untracked files
+## Untracked files / commit status
 
-Everything above (`data/terrain/11e/`, `data/dispositionMissions.json`, `scripts/11e/`, the `svgDefs.json` additions, the `script.js`/`styles.css` changes, `.claude/settings.json`) is sitting as local changes/new files — nothing has been committed. Check `git status` and commit when ready.
+As of this session, everything above (`data/terrain/11e/`, `data/dispositionMissions.json`,
+`scripts/11e/`, the `svgDefs.json` additions, the `script.js`/`styles.css`
+changes, `.claude/settings.json`, `about.html`, `backend/functions/deployments/index.mjs`)
+was still local/uncommitted — the user said at the end of this session they're
+about to push it (first commit of anything from the whole 11e effort). If
+you're reading this next session, check `git log`/`git status` for the real
+current state instead of trusting this paragraph — it'll be stale the moment
+that push happens. One thing to specifically verify once pushed: the
+**backend Lambda change** (`backend/functions/deployments/index.mjs`,
+adding `layoutEdition`/`myDisposition`/`oppDisposition`/`e11LayoutLetter`
+save/load support) needs deploying separately from the frontend — pushing to
+git does not deploy it. Check whether that's been done before assuming 11e
+deployment save/load actually works against the live API.
