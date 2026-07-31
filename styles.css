@@ -218,6 +218,20 @@ body {
 .tool-btn:hover { background: #1a508b; }
 .tool-btn.active { background: #e94560; border-color: #e94560; }
 
+.tool-btn.loading { color: transparent; position: relative; pointer-events: none; }
+.tool-btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 13px; height: 13px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: toolBtnSpin 0.6s linear infinite;
+}
+@keyframes toolBtnSpin { to { transform: rotate(360deg); } }
+
 /* ── Color Picker ── */
 .color-picker {
   display: flex;

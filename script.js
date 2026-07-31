@@ -819,6 +819,13 @@ let myDisposition        = null;
 let oppDisposition       = null;
 let e11LayoutLetter      = null; // 'A' | 'B' | 'C' — null until explicitly picked
 let dispositionMissions  = null; // loaded manifest, data/dispositionMissions.json
+let losOriginUnit        = null; // { group } modelGroup LOS is currently cast from, or null.
+                                  // Every base in the group is its own vantage point (per the
+                                  // user: "each model is looking and being seen from its
+                                  // vantage point... determines what the whole unit can see") --
+                                  // holds a direct reference to the modelGroup object (not an
+                                  // index into `drawings`) so it stays valid regardless of
+                                  // unrelated splices elsewhere in that shared flat array.
 
 function findDispositionPairing(a, b) {
   if (!dispositionMissions) return null;
@@ -902,6 +909,17 @@ async function loadE11Layout() {
 function updateHsToggleVisibility() {
   updateHsToggle(document.getElementById('leftSidebar'));
   updateHsToggle(document.getElementById('mobileMenu'));
+}
+
+function updateLosButtonVisibility() {
+  const btn = document.getElementById('losAreaBtn');
+  if (btn) btn.style.display = (currentEdition === '11e') ? '' : 'none';
+}
+
+function clearLosArea() {
+  losOriginUnit = null;
+  const btn = document.getElementById('losAreaBtn');
+  if (btn) { btn.classList.remove('active', 'loading'); btn.disabled = false; }
 }
 
 // ─── Army List Import ─────────────────────────────────────────────────────────
@@ -1452,6 +1470,7 @@ async function init() {
   buildNav();
   buildMissionSidebar();
   bindToolbar();
+  updateLosButtonVisibility();
   bindCanvas();
   resizeCanvas();
   setupCanvasDropZone();
@@ -1959,6 +1978,8 @@ function bindToolbar() {
   document.querySelectorAll('.color-swatch').forEach(swatch => {
     swatch.onclick = () => selectColor(swatch.dataset.color);
   });
+  const losBtn = document.getElementById('losAreaBtn');
+  if (losBtn) losBtn.onclick = castLosFromSelection;
 }
 
 function bindCanvas() {
@@ -1997,10 +2018,12 @@ function selectLayout(index) {
 
 function selectEdition(edition) {
   currentEdition = edition;
+  updateLosButtonVisibility();
   if (edition === '11e') {
     loadE11Layout(); // clears/no-ops until all 3 picks (my/opp/layout) exist
   } else {
     e11Layout = null; e11LayoutSrc = null;
+    clearLosArea();
     if (currentTerrainFormat === 'wtc') loadWtcImage();
     else if (TERRAIN_OVERLAY_ENABLED) loadTerrainOverlay();
     else drawScene();
@@ -2020,6 +2043,42 @@ function selectMission(id) {
   updateHsToggle(document.getElementById('mobileMenu'));
   if (currentTerrainFormat === 'wtc') { populateLayoutDropdown(); loadWtcImage(); }
   else drawScene();
+}
+
+function castLosFromSelection() {
+  if (currentEdition !== '11e' || !e11Layout) return;
+  if (currentTool !== 'models' || modelsEditingIndex === null || modelsSelectedBases.size === 0) {
+    showDrawingHint('👁️ Select a unit first, then click LoS Area');
+    return;
+  }
+  const btn = document.getElementById('losAreaBtn');
+  const group = drawings[modelsEditingIndex];
+
+  if (losOriginUnit && losOriginUnit.group === group) {
+    losOriginUnit = null; // clicking LoS again on the same unit toggles it off
+    if (btn) btn.classList.remove('active');
+    drawScene();
+    return;
+  }
+
+  // The visibility-polygon computation (one per model in the unit, see
+  // drawLosArea()) is synchronous and noticeably slower than a normal
+  // redraw -- show a spinner first and defer the actual work to the next
+  // tick so the browser gets a chance to paint it, rather than freezing on
+  // the old button label until the computation finishes.
+  if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+  setTimeout(() => {
+    // try/finally: if the geometry computation throws, the button must still
+    // come back to a clickable state -- otherwise a bad frame permanently
+    // strands it disabled+spinning and toggling off (which needs a click to
+    // reach the early-return branch above) becomes impossible.
+    try {
+      losOriginUnit = { group };
+      drawScene();
+    } finally {
+      if (btn) { btn.classList.remove('loading'); btn.classList.add('active'); btn.disabled = false; }
+    }
+  }, 0);
 }
 
 function selectTool(tool) {
@@ -2072,6 +2131,7 @@ function drawScene() {
   drawObjectives();
   if (TERRAIN_OVERLAY_ENABLED && currentEdition !== '11e') drawTerrainOverlay();
   if (currentEdition === '11e' && e11Layout) drawE11Layout();
+  drawLosArea();
   drawUserDrawings();
   drawInProgressPoints();
 }
@@ -2321,12 +2381,48 @@ function drawE11Path(d, transform, fillStyle, strokeStyle, lineWidth) {
   if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth || 1; ctx.stroke(); }
 }
 
-function drawE11Layout() {
-  if (!e11Layout) return;
+// Objective icons (objHomeRed/objHomeBlue/objCentral/objExpansion) are
+// loaded from svgDefs and cached by key -- there are only 4 possible icons,
+// and drawE11Layout() runs on every drawScene() call (including every
+// mousemove while dragging), so re-creating a Blob/Image and re-decoding
+// asynchronously every frame caused a visible flicker: each pending load
+// would draw onto whatever canvas state existed once it resolved, racing
+// against the next frame's clearRect(). Caching means every frame after the
+// first just does a synchronous, already-decoded ctx.drawImage().
+const e11ObjectiveIconCache = {};
+function getE11ObjectiveIcon(iconKey) {
+  if (e11ObjectiveIconCache[iconKey]) return e11ObjectiveIconCache[iconKey];
+  const svgContent = svgDefs[iconKey];
+  if (!svgContent) return null;
+  const img = new Image();
+  const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => { URL.revokeObjectURL(url); drawScene(); }; // repaint once this icon is ready
+  img.src = url;
+  e11ObjectiveIconCache[iconKey] = img;
+  return img;
+}
+
+// Board-inch <-> canvas-pixel transform for the 11e board. The 11e board's
+// physical size varies slightly per layout (extracted from source material,
+// not a fixed 60x44 like the legacy GW convention), so it gets its own
+// fit-to-canvas scale/offset rather than the shared IPX-based i2p(). Shared
+// by drawE11Layout() and the LOS geometry engine so both agree on exactly
+// where the board sits on the canvas.
+function getE11Transform() {
   const scale = Math.min(canvas.width / e11Layout.boardWidth, canvas.height / e11Layout.boardHeight);
   const offsetX = (canvas.width - e11Layout.boardWidth * scale) / 2;
   const offsetY = (canvas.height - e11Layout.boardHeight * scale) / 2;
-  const tx = (x, y) => [x * scale + offsetX, y * scale + offsetY];
+  return {
+    scale, offsetX, offsetY,
+    toPx:     (x, y)   => [x * scale + offsetX, y * scale + offsetY],
+    toInches: (px, py) => [(px - offsetX) / scale, (py - offsetY) / scale],
+  };
+}
+
+function drawE11Layout() {
+  if (!e11Layout) return;
+  const { toPx: tx, scale } = getE11Transform();
 
   (e11Layout.zones || []).forEach(zone => {
     ctx.beginPath();
@@ -2357,19 +2453,213 @@ function drawE11Layout() {
       let iconKey = 'objCentral';
       if (obj.type === 'home') iconKey = obj.owner === 2 ? 'objHomeBlue' : 'objHomeRed';
       else if (obj.type === 'expansion') iconKey = 'objExpansion';
-      const svgContent = svgDefs[iconKey];
-      if (!svgContent) return;
+      const img = getE11ObjectiveIcon(iconKey);
+      if (!img || !img.complete || img.naturalWidth === 0) return; // not loaded yet -- next frame will have it
       const [cx, cy] = tx(obj.x, obj.y);
       const size = 3 * scale; // ~3" icon diameter
-      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-      const url  = URL.createObjectURL(blob);
-      const img  = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
+      ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
     });
+  }
+}
+
+// ─── 11e Line of Sight ──────────────────────────────────────────────────────
+// LOS blocking rule (11e only -- see 11E-PROGRESS.md gotcha #9): a model
+// OUTSIDE every terrain area is blocked by each area's whole polygon as one
+// solid body. A model INSIDE a terrain area sees out through that area's own
+// boundary freely -- only that area's 'dense' pieces block from within, and
+// every OTHER area still blocks in full, same as the outside case.
+
+// Area/piece `d` strings emitted by scripts/11e/03_flatten_batch.py's
+// points_to_d() are always straight-line M/L...Z polygons (never curves --
+// that function only ever tessellates into line segments), so unlike
+// drawE11Path() this parser only needs M/L/Z.
+function parseAreaPath(d) {
+  const tokens = d.trim().split(/\s+/);
+  const pts = [];
+  for (let i = 0; i < tokens.length; ) {
+    if (tokens[i] === 'M' || tokens[i] === 'L') {
+      pts.push([parseFloat(tokens[i + 1]), parseFloat(tokens[i + 2])]);
+      i += 3;
+    } else {
+      i++; // 'Z'
+    }
+  }
+  return pts;
+}
+
+// Same ray-casting test as isPointInUnit(), for plain [x,y] point arrays
+// instead of {x,y} objects.
+function pointInPolygon(x, y, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+// True if a circle (board-inches) overlaps a polygon at all -- not just
+// whether its center point does. A model base straddling a terrain area's
+// edge is treated the same as a model fully inside it ("if one model can be
+// seen and shot, the whole unit can be seen and shot" -- partial containment
+// counts as full containment, per the user).
+function circleOverlapsPolygon(cx, cy, r, pts) {
+  if (pointInPolygon(cx, cy, pts)) return true;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % pts.length];
+    if (distToSegment(cx, cy, x1, y1, x2, y2) < r) return true;
+  }
+  return false;
+}
+
+// Given an origin + the observing base's radius (both board-inches), returns
+// the list of blocking segments per the rule above. Always includes the
+// board edges so every cast ray terminates somewhere.
+//
+// NOTE: area.id / piece.featureId are NOT reliably unique per polygon --
+// the extraction pipeline derives them from the nearest feature-letter badge
+// (e.g. "EF_7"), and multiple physically separate area polygons can share
+// the same nearest badge and therefore the same id (confirmed: 8 unique ids
+// across 16 areas in battlefieldDominance-A.json, and the id-generation
+// logic is identical for all 45 layout files, so this isn't a one-off).
+// String-matching on id/featureId was wrongly excluding OTHER, unrelated
+// areas that happened to share myArea's id -- this was the bug where a
+// terrain area on the far side of the board didn't block LOS at all.
+// Fixed by using object-reference equality for "is this myArea" (areas is
+// freshly built every call, so reference identity is safe) and geometric
+// containment (piece centroid inside myArea's polygon) instead of featureId
+// for matching a dense piece to "my" area.
+function collectLosBlockers(ox, oy, radius) {
+  const areas = (e11Layout.areas || []).map(a => ({ pts: parseAreaPath(a.d) }));
+  const myArea = areas.find(a => circleOverlapsPolygon(ox, oy, radius, a.pts));
+  const segments = [];
+  const addPoly = pts => pts.forEach((p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    segments.push([p[0], p[1], q[0], q[1]]);
+  });
+
+  areas.forEach(a => { if (a !== myArea) addPoly(a.pts); });
+  if (myArea) {
+    (e11Layout.pieces || [])
+      .filter(p => p.terrainType === 'dense')
+      .forEach(p => {
+        const piecePts = parseAreaPath(p.d);
+        const cx = piecePts.reduce((s, pt) => s + pt[0], 0) / piecePts.length;
+        const cy = piecePts.reduce((s, pt) => s + pt[1], 0) / piecePts.length;
+        if (pointInPolygon(cx, cy, myArea.pts)) addPoly(piecePts);
+      });
+  }
+  addPoly([
+    [0, 0], [e11Layout.boardWidth, 0],
+    [e11Layout.boardWidth, e11Layout.boardHeight], [0, e11Layout.boardHeight],
+  ]);
+  return segments;
+}
+
+// Standard ray/segment parametric intersection. Returns the nearest forward
+// hit {x,y,t} along the ray from (ox,oy) in direction (dx,dy), or null.
+function raySegmentIntersect(ox, oy, dx, dy, x1, y1, x2, y2) {
+  const sx = x2 - x1, sy = y2 - y1;
+  const denom = dx * sy - dy * sx;
+  if (Math.abs(denom) < 1e-10) return null; // parallel
+  const t = ((x1 - ox) * sy - (y1 - oy) * sx) / denom;
+  const u = ((x1 - ox) * dy - (y1 - oy) * dx) / denom;
+  if (t < 0 || u < 0 || u > 1) return null;
+  return { x: ox + dx * t, y: oy + dy * t, t };
+}
+
+// Angular-sweep visibility polygon: cast a ray at every blocking segment's
+// endpoint angle (plus a tiny +-epsilon either side, to resolve corners
+// cleanly) and take the nearest hit per ray; sorting those hits by angle and
+// connecting them in order traces the visible area.
+function computeVisibilityPolygon(ox, oy, segments) {
+  const EPS = 0.0001;
+  const TWO_PI = Math.PI * 2;
+  // atan2 only ever returns values in (-pi, pi] -- a raw a+EPS/a-EPS near that
+  // boundary can numerically overshoot it without wrapping, which then sorts
+  // to the wrong end of the angle-ordered list below and draws one long
+  // spurious edge clean across the whole polygon (this was the tangled-mess
+  // bug: a busy spot with segments pointing in every direction is exactly
+  // where a perturbed angle is likely to land near +-pi).
+  const norm = a => {
+    let r = a % TWO_PI;
+    if (r <= -Math.PI) r += TWO_PI;
+    else if (r > Math.PI) r -= TWO_PI;
+    return r;
+  };
+  const angles = new Set();
+  segments.forEach(([x1, y1, x2, y2]) => {
+    [[x1, y1], [x2, y2]].forEach(([x, y]) => {
+      const a = Math.atan2(y - oy, x - ox);
+      angles.add(a); angles.add(norm(a + EPS)); angles.add(norm(a - EPS));
+    });
+  });
+
+  const hits = [...angles].map(angle => {
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    let best = null, bestT = Infinity;
+    segments.forEach(([x1, y1, x2, y2]) => {
+      const hit = raySegmentIntersect(ox, oy, dx, dy, x1, y1, x2, y2);
+      if (hit && hit.t < bestT) { bestT = hit.t; best = hit; }
+    });
+    return best ? [best.x, best.y, angle] : null;
+  }).filter(Boolean);
+
+  hits.sort((a, b) => a[2] - b[2]);
+  return hits.map(h => [h[0], h[1]]);
+}
+
+// Each model base is its own vantage point -- a full visibility polygon is
+// computed independently per base (same single-origin math as before, just
+// looped), then all of them are filled with the same translucent style so
+// overlapping ones alpha-blend into one combined shape on screen. This is a
+// true per-model union, not an approximation -- and needs no actual polygon
+// union/hull code, since canvas compositing gives that for free. Explicitly
+// NOT the group's selection-box bounds; rays originate from where each
+// model actually stands.
+function drawLosArea() {
+  if (currentEdition !== '11e' || !e11Layout || !losOriginUnit) return;
+  const { group } = losOriginUnit;
+  if (!group || !drawings.includes(group) || !group.bases || group.bases.length === 0) {
+    clearLosArea();
+    return;
+  }
+
+  // A bad frame here (geometry edge case) must not abort the rest of
+  // drawScene() -- drawUserDrawings()/drawInProgressPoints() run right
+  // after this and would otherwise silently stop rendering too, e.g. mid-drag.
+  try {
+    const t = getE11Transform();
+    const sz = getBaseSize(group.baseSizeKey);
+    const radiusIn = mmToIn(Math.max(sz.w, sz.h)) / 2; // bounding-circle radius for ovals/rects too
+    const single = group.bases.length === 1;
+
+    ctx.fillStyle = 'rgba(255,220,80,0.25)';
+    ctx.strokeStyle = 'rgba(255,200,0,0.6)';
+    ctx.lineWidth = 1.5;
+
+    group.bases.forEach(base => {
+      const [ox, oy] = t.toInches(base.x, base.y);
+      const segments = collectLosBlockers(ox, oy, radiusIn);
+      const poly = computeVisibilityPolygon(ox, oy, segments);
+      if (poly.length < 3) return;
+
+      ctx.beginPath();
+      poly.forEach(([x, y], i) => {
+        const [px, py] = t.toPx(x, y);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fill();
+      // Skip the per-base outline on multi-model units -- it would draw a
+      // visible seam through the middle of the merged blob wherever two
+      // bases' polygons overlap. A single model keeps its outline for clarity.
+      if (single) ctx.stroke();
+    });
+  } catch (e) {
+    console.warn('[11e] LOS computation failed:', e);
   }
 }
 
@@ -2405,7 +2695,6 @@ function drawUserDrawings() {
   drawings.forEach((drawing, i) => {
     if      (drawing.type === 'unit')       drawUnit(drawing);
     else if (drawing.type === 'measure')    drawMeasure(drawing);
-    else if (drawing.type === 'sight')      drawSight(drawing);
     else if (drawing.type === 'label')      drawLabel(drawing);
     else if (drawing.type === 'modelGroup') drawModelGroup(drawing, i === modelsEditingIndex);
   });
@@ -2462,36 +2751,6 @@ function drawMeasure(drawing) {
   });
 }
 
-function drawSight(drawing) {
-  const { start, end } = drawing;
-  ctx.strokeStyle = '#00aaff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(start.x, start.y);
-  ctx.lineTo(end.x, end.y);
-  ctx.stroke();
-
-  const blocked = end._clipped;
-  if (blocked) {
-    ctx.fillStyle = '#ff3333';
-    ctx.beginPath();
-    ctx.arc(end.x, end.y, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('✕', end.x, end.y);
-  }
-
-  [start, end].forEach(pt => {
-    ctx.fillStyle = '#00aaff';
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
-
 function drawLabel(drawing) {
   ctx.font = '14px sans-serif';
   ctx.textAlign = 'center';
@@ -2538,8 +2797,6 @@ function isPointInUnit(x, y, unit) {
   return inside;
 }
 
-function clipLosToTerrain(start, end) { return end; }
-
 function isRotatable(group) {
   const sz = getBaseSize(group.baseSizeKey || '32');
   return sz.shape === 'oval' || sz.shape === 'rectangle';
@@ -2574,12 +2831,12 @@ function distToSegment(px, py, ax, ay, bx, by) {
 function handleMouseDown(e) {
   const { x, y } = getCanvasPoint(e);
 
-  // Right-click on measure/sight/label: delete it
-  if (e.button === 2 && (currentTool === 'measure' || currentTool === 'sight' || currentTool === 'label')) {
+  // Right-click on measure/label: delete it
+  if (e.button === 2 && (currentTool === 'measure' || currentTool === 'label')) {
     for (let i = drawings.length - 1; i >= 0; i--) {
       const d = drawings[i];
       let hit = false;
-      if ((d.type === 'measure' || d.type === 'sight') && d.start && d.end) {
+      if (d.type === 'measure' && d.start && d.end) {
         hit = distToSegment(x, y, d.start.x, d.start.y, d.end.x, d.end.y) < 10;
       } else if (d.type === 'label') {
         hit = Math.hypot(x - d.x, y - d.y) < 20;
@@ -2627,20 +2884,6 @@ function handleMouseDown(e) {
       drawScene();
     }
 
-  } else if (currentTool === 'sight') {
-    if (measurePoints.length === 0) {
-      measurePoints.push({ x, y });
-    } else {
-      const start = measurePoints[0];
-      const rawEnd = { x, y };
-      const clippedEnd = clipLosToTerrain(start, rawEnd);
-      const wasClipped = clippedEnd.x !== rawEnd.x || clippedEnd.y !== rawEnd.y;
-      if (wasClipped) clippedEnd._clipped = true;
-      drawings.push({ type: 'sight', start, end: clippedEnd });
-      measurePoints = [];
-      drawScene();
-    }
-
   } else if (currentTool === 'label') {
     modalPrompt('Add Label', 'Enter label text:', '', 'Label text...').then(text => {
       if (text && text.trim()) {
@@ -2655,6 +2898,16 @@ function handleMouseDown(e) {
 }
 
 function handleModelsMouseDown(e, x, y) {
+  // LoS Area recomputes N full visibility polygons (one per model in the
+  // unit) on every drawScene() call -- selecting, dragging, or rotating
+  // models while it's active was laggy since each of those triggers a
+  // redraw. Per the user: LoS is for static testing only, not live
+  // rearranging -- disable model interaction entirely while it's on rather
+  // than trying to keep it fast during drag.
+  if (currentEdition === '11e' && losOriginUnit) {
+    showDrawingHint('🔦 LoS Area is active — click it again to turn off before moving models (static testing only)');
+    return;
+  }
 
   // Check rotation handle first (left click, edit mode)
   if (e.button === 0 && modelsEditingIndex !== null) {
@@ -2798,9 +3051,9 @@ function handleMouseMove(e) {
     canvas.style.cursor = over ? 'grab' : 'crosshair';
   }
 
-  if (measurePoints.length === 1 && (currentTool === 'measure' || currentTool === 'sight')) {
+  if (measurePoints.length === 1 && currentTool === 'measure') {
     drawScene();
-    ctx.strokeStyle = currentTool === 'measure' ? 'rgba(255,136,0,0.5)' : 'rgba(0,170,255,0.5)';
+    ctx.strokeStyle = 'rgba(255,136,0,0.5)';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
@@ -3138,6 +3391,7 @@ function clearCanvas() {
       measurePoints = [];
       modelsEditingIndex = null;
       modelsSelectedBases.clear();
+      clearLosArea();
       drawingHintShown = false;
       hideDrawingHint();
       drawScene();

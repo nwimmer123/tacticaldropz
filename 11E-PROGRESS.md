@@ -189,9 +189,197 @@ persist, and the mobile hamburger menu specifically.
 4. ~~Generalize `02_extract_page9_layoutA.py` and `03_flatten_for_app.py`~~ — **done**, see `02_extract_page.py` / `03_flatten_batch.py` / `04_compare.py` in "Pipeline scripts" above.
 5. ~~`data/dispositionMissions.json`~~ — **done**, see above.
 6. ~~The Force Disposition dual-picker UI~~ — **done**, see above (pending manual verification, item 1).
-7. **LOS raycasting feature itself** — schema supports it (see gotcha #9) but no rendering/logic exists yet.
+7. ~~LOS raycasting feature~~ — **done**, see "LoS Area (11e-only visibility)" below. **Not manually verified in a browser** — user will validate in Chrome directly, same as the picker UI.
 8. **Corner-coordinate "setup mode"** — also schema-supported (straight-line polygon vertices, not smooth curves) but not built.
 9. **Cleanup**: rename `battlefieldDominance-A.json` to `takeAndHold-takeAndHold-A.json` for filename consistency with the other 44 (optional, cosmetic — the manifest builder already absorbs this irregularity, so it's no longer blocking anything, purely cosmetic now).
+
+## LoS Area (11e-only visibility) — built this session
+
+Select a unit on the board, click **🔦 LoS Area** in the toolbar, and a
+translucent area radiates out from that unit in every direction until
+blocked by terrain — implements the design already sketched in gotcha #9
+above (dense pieces double as wall geometry). Confirmed 11e-only by the
+user: 10th edition's formats have no equivalent blocking geometry (WTC is a
+flat PNG background; GW's overlay data has no interior/dense-light concept
+and is gated off by `TERRAIN_OVERLAY_ENABLED = false` anyway).
+
+**Replaced, not added alongside**: the old "👁️ Sight" tool (click twice to
+draw a plain line) never actually worked — its `clipLosToTerrain()` hook was
+a permanent no-op stub — so per the user it was deleted outright rather than
+kept as a separate 10th-edition-only tool. The toolbar slot (`index.html`,
+was `data-tool="sight"`) is now `id="losAreaBtn"`, hidden automatically
+under 10th Edition (`updateLosButtonVisibility()`, same pattern as the
+existing Hidden Supplies toggle).
+
+**How it works** (all new code in `script.js`):
+- `getE11Transform()` — extracted the board-inch↔canvas-pixel transform that
+  `drawE11Layout()` already computed inline, so the LOS math and the
+  renderer agree exactly on where the board sits on the canvas. This was
+  necessary, not just tidy: model bases are placed using the shared
+  generic canvas/IPX convention, but the 11e board's real size varies
+  slightly per layout and gets its own independent fit-to-canvas scale —
+  the LOS origin has to go through the *same* inverse transform
+  `drawE11Layout()` uses, or it'd be checking the wrong point against the
+  terrain polygons.
+- `parseAreaPath()` — turns an `areas`/`pieces` `d` string into a plain
+  point array. Only handles `M`/`L`/`Z` (confirmed
+  `scripts/11e/03_flatten_batch.py`'s `points_to_d()` never emits curves —
+  everything's pre-tessellated straight lines), simpler than the renderer's
+  `drawE11Path()` which also handles `C` for generality it doesn't need here.
+- `collectLosBlockers(ox, oy)` — implements the outside/inside rule exactly
+  as documented in gotcha #9: point-in-polygon against `areas` to find which
+  terrain feature (if any) contains the origin; every *other* area
+  contributes its full boundary as a blocker; the *dense* pieces of the
+  containing area (matched via `featureId`) contribute theirs too; the
+  containing area's own boundary is excluded so you can see out through open
+  sides. Board edges are always added so every cast ray terminates somewhere.
+- `computeVisibilityPolygon()` — standard angular-sweep/shadowcasting: ray
+  at every blocker-segment endpoint angle (±tiny epsilon for clean corners),
+  nearest intersection per ray via `raySegmentIntersect()`, sort by angle,
+  connect. No caching — recomputed fresh every `drawScene()` call, which is
+  what makes it follow live while you drag the origin unit (the existing
+  "Models tool drag" handler already calls `drawScene()` every move).
+- `losOriginUnit` stores a **direct object reference** to the modelGroup
+  (`{ group, baseIndex }`), not an index into `drawings[]` — `drawings` is a
+  single flat array holding every drawing type (measure lines, labels,
+  model groups), so any unrelated deletion elsewhere in that array would
+  have silently shifted an index-based reference onto the wrong unit.
+  `drawLosArea()` guards with `drawings.includes(group)` to detect the
+  origin unit itself being deleted.
+- **Known minor gap, accepted as low-risk**: if you delete a *different*
+  individual base within the *same* group LOS is cast from (right-click
+  remove base), the stored `baseIndex` isn't re-validated against that
+  specific shift — same class of pre-existing index-drift risk that already
+  applies to `modelsSelectedBases` elsewhere in the app, not something new
+  introduced here.
+
+Doc updated to match: `about.html`'s old "👁️ Line of Sight" entry (under
+"Other Tools") removed, replaced with a "🔦 LoS Area" entry under the 11th
+Edition subsection (added last session).
+
+**Button feedback**: `#losAreaBtn` toggles the existing `.tool-btn.active`
+red styling while a LOS is cast (same convention as the shape-picker
+buttons). The visibility-polygon computation is synchronous and slow enough
+to notice, so clicking shows a spinner (`.tool-btn.loading`, new CSS) and
+defers the actual computation one tick (`setTimeout(...,0)`) so the browser
+paints the spinner before the blocking math runs. `clearLosArea()` is the
+one place that resets both the state and the button's classes together —
+used everywhere `losOriginUnit` gets cleared (toggle-off, edition switch,
+clear board, origin-unit-deleted self-heal in `drawLosArea()`).
+
+**Found and fixed a real pre-existing bug while testing this**: dragging a
+unit over a board objective made that objective's icon flicker. Root cause,
+in `drawE11Layout()`'s objective-icon rendering (predates this session
+entirely) — it created a brand-new `Blob`/`Image`/async-decode for every
+objective on *every* `drawScene()` call, and dragging fires `drawScene()` on
+every mousemove. Each pending async image load would draw onto whatever
+canvas state existed once it resolved, racing against the next frame's
+`clearRect()`. Fixed with `getE11ObjectiveIcon(iconKey)` — there are only 4
+possible icons (`objHomeRed`/`objHomeBlue`/`objCentral`/`objExpansion`), so
+they're now loaded once and cached; every frame after the first is a
+synchronous, already-decoded `ctx.drawImage()`, no more race.
+
+**Found and fixed a second real bug via user testing (annotated
+`scripts/11e/cache/error2.png`)**: the visibility polygon rendered as a
+tangled scribble of long crossing lines instead of a clean shape, reproduced
+when the unit sat straddling multiple terrain/zone boundaries at once (a
+"busy" spot with obstacle edges pointing in many directions). Root cause in
+`computeVisibilityPolygon()`: the epsilon-perturbed ray angles
+(`angle +- EPS`, used to resolve obstacle corners cleanly) were never
+wrapped back into `Math.atan2`'s `(-pi, pi]` range. A perturbed angle
+landing just past that boundary sorts to the wrong end of the angle-ordered
+point list, producing one long spurious edge straight across the whole
+polygon — exactly the symptom. Fixed with a `norm()` wrap-around helper.
+Also wrapped `drawLosArea()`'s body and `castLosFromSelection()`'s deferred
+computation in try/catch (`finally`, for the button) so a future geometry
+edge case can't (a) abort the rest of `drawScene()` mid-frame or (b) leave
+the toolbar button permanently stuck disabled/spinning — the latter was
+almost certainly why the user separately observed clicking LoS Area again
+didn't toggle it off, since a disabled button doesn't receive click events
+at all.
+
+**Two design decisions resolved and implemented (were open questions above)**:
+
+1. **Partial containment counts as full containment.** "If one model can be
+   seen and shot, the whole unit can be seen and shot." `collectLosBlockers()`
+   now takes a `radius` and uses `circleOverlapsPolygon()` (new — center-in-
+   polygon OR distance-to-any-edge < radius) instead of a bare center-point
+   test, so a base straddling a terrain area's edge is treated as fully
+   inside that area, not ambiguously outside.
+
+2. **LOS originates from each model's actual position, not the group's
+   selection box.** The user was explicit about this: "each model is
+   looking and being seen from its vantage point... determines what the
+   whole unit can see." `drawLosArea()` now computes one full independent
+   visibility polygon per base in the unit (`group.bases`, unchanged
+   single-origin math from `computeVisibilityPolygon()`, just looped) and
+   fills each with the same translucent style — overlapping ones
+   alpha-blend into one merged shape on screen automatically. This is a true
+   per-model union, not the hull-around-the-models approximation the user
+   floated as an acceptable fallback — turned out unnecessary, since canvas
+   alpha compositing gives the visual union for free without writing any
+   polygon-union/convex-hull code, and per-model origins are strictly more
+   accurate than a hull approximation would be anyway. Base radius for the
+   circle-overlap test above comes from `getBaseSize(group.baseSizeKey)`
+   (`mmToIn(Math.max(w,h))/2` — bounding-circle radius, used for
+   oval/rectangle bases too rather than their exact footprint shape, a
+   reasonable simplification). `losOriginUnit` no longer needs a
+   `baseIndex` — it's just `{ group }` now, applies to the whole unit.
+   Multi-model units skip the per-base stroke outline (would draw a visible
+   seam through the merged blob wherever two bases' polygons overlap);
+   single-model units keep it for a clean, defined edge.
+
+**Perf follow-up — confirmed laggy, fixed by disabling interaction instead
+of optimizing the math**: the user tested this and confirmed N full
+visibility computations per frame (N = bases in the unit) was noticeably
+slow — not just while dragging the LOS-origin unit, but *selecting any
+other model* too, since every one of those interactions calls `drawScene()`.
+Rather than trying to make the geometry cheaper (spatial partitioning,
+memoization, etc.), the user's call: LOS Area is a static-testing tool, not
+something you rearrange the board underneath. `handleModelsMouseDown()` now
+early-returns (with a hint via `showDrawingHint()`) whenever
+`currentEdition === '11e' && losOriginUnit` — blocks base selection,
+multi-select, drag-start, rotation-handle grab, right-click base removal,
+and placing new model groups, all in one place, since none of those can
+happen without going through that function first. The drag-continue branch
+in `handleMouseMove()` needed no separate change — `modelsDragStart` simply
+never gets set now, so it can't fire. Toggling LOS off (via the button
+itself, a separate code path) always still works. Documented in `about.html`
+as a tip under the LoS Area section.
+
+**Found and fixed a data-quality bug via user testing (annotated
+`scripts/11e/cache/error4.png`)**: a terrain area on the far side of the
+board wasn't blocking LOS at all — light passed straight through it,
+including its dense (green) pieces. Root cause: `area.id` (and
+`piece.featureId`) are **not reliably unique per polygon**. The extraction
+pipeline (`scripts/11e/02_extract_page.py`) derives an area's id from its
+*nearest feature-letter badge* (e.g. `"EF_7"`), and multiple physically
+separate area polygons can legitimately be nearest to the same badge —
+confirmed directly: `battlefieldDominance-A.json` has only 8 unique ids
+across 16 areas, and two of the `"EF_7"`-tagged polygons sit over 12 inches
+apart on the board. The id-generation logic is identical across all 45
+layout files, so this wasn't a one-off. `collectLosBlockers()` was excluding
+"myArea" by string id match (`a.id !== myArea.id`), which also silently
+excluded every *other*, unrelated area sharing that same id from the
+blocker list. Fixed two ways, both avoiding the unreliable id entirely:
+- Area self-exclusion now uses **object reference equality** (`a !== myArea`)
+  instead of id matching — safe because `collectLosBlockers()` builds a
+  fresh `areas` array from `e11Layout.areas` on every call.
+- Dense-piece-to-area matching now uses **geometric containment** (a
+  piece's centroid tested with `pointInPolygon()` against `myArea`'s own
+  polygon) instead of `p.featureId === myArea.id` — actually more directly
+  correct as a design regardless of the id bug, since it matches by where a
+  piece really sits rather than trusting a derived label.
+
+This was verified with a direct before/after test (not just theory) — see
+session transcript for the reproduction script. **Not fixed at the data
+layer** — the underlying `id`/`featureId` non-uniqueness still exists in
+all 45 `data/terrain/11e/*.json` files and in the extraction pipeline's id
+generation. Left as-is because nothing else currently reads those fields
+(rendering in `drawE11Layout()` never touches `id`/`featureId`, only the new
+LOS code does), so the blast radius was fully contained by the client-side
+fix above — but worth knowing if a future feature ever needs genuinely
+unique per-polygon ids.
 
 ## Untracked files
 
