@@ -830,8 +830,12 @@ let terrainOverlaySrc  = null;
 let svgDefs            = null; // loaded once from data/terrain/svgDefs.json
 
 // 11e (11th edition) layout data
-let e11Layout    = null;
-let e11LayoutSrc = null;
+let e11Layout      = null;
+let e11LayoutSrc   = null;
+let e11LayoutError = false; // true if the last loadE11Layout() fetch failed (bad connection, etc)
+                             // -- lets drawSetupModeOverlay() tell "still picking" apart from
+                             // "picked everything but the layout JSON didn't load" (see error12/13
+                             // in scripts/11e/cache/, which turned out to be exactly this on bad wifi).
 
 // Table Set Up mode -- toggle next to Place Models. Shows every terrain
 // area's corner (x,y) instead of letting you place models; see
@@ -919,6 +923,7 @@ function loadWtcImage() {
 }
 
 async function loadE11Layout() {
+  e11LayoutError = false;
   if (currentEdition !== '11e' || !myDisposition || !oppDisposition || !e11LayoutLetter) {
     e11Layout = null; e11LayoutSrc = null; drawScene(); return;
   }
@@ -936,6 +941,7 @@ async function loadE11Layout() {
   } catch (e) {
     console.warn(`[11e] Could not load ${src}:`, e.message);
     e11Layout = null;
+    e11LayoutError = true;
   }
   drawScene();
 }
@@ -2811,11 +2817,18 @@ function drawSetupModeOverlay() {
   const fontScale = mobileFontScale();
 
   if (currentEdition !== '11e' || !e11Layout) {
+    // e11LayoutError distinguishes "haven't finished picking yet" from
+    // "picked everything but the layout JSON failed to fetch" (e.g. bad
+    // wifi/cell signal) -- these looked identical before, which is exactly
+    // what made error12/13 in scripts/11e/cache/ confusing to diagnose.
+    const allPicked = currentEdition === '11e' && myDisposition && oppDisposition && e11LayoutLetter;
+    const msg = (allPicked && e11LayoutError)
+      ? 'Could not load this layout — check your connection and tap the layout letter again to retry'
+      : 'Select 11th Edition + dispositions + a layout to see setup coordinates';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = `${14 * fontScale}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText('Select 11th Edition + dispositions + a layout to see setup coordinates',
-      LOGICAL_W / 2, LOGICAL_H / 2);
+    ctx.fillText(msg, LOGICAL_W / 2, LOGICAL_H / 2);
     ctx.textAlign = 'left';
     return;
   }
