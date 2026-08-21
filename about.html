@@ -30,8 +30,10 @@
     .tier-box.pro { border-color:rgba(233,69,96,0.4); }
     .tier-box h4 { font-size:13px; font-weight:700; margin-bottom:10px; color:#fff; }
     .tier-box ul { margin:0; padding-left:16px; }
-    /* ── Mobile overrides for about page ── */
-    @media (max-width: 767px) {
+    /* ── Mobile overrides for about page — must match MOBILE_BREAKPOINT in
+       script.js (960px); this page has no JS, so the value can't be shared
+       and has to be kept in sync by hand. ── */
+    @media (max-width: 959px) {
       body { overflow: auto !important; }
       .top-nav { display: flex !important; }
       .container { height: auto !important; min-height: 100vh; overflow: visible !important; }
@@ -274,7 +276,7 @@
               <li><strong>Hidden Supplies</strong> — appears when WTC + Hammer & Anvil are selected (10th Edition)</li>
             </ul>
 
-            <div class="tip">💡 Tablet users (768px+) get the full desktop experience with all tools.</div>
+            <div class="tip">💡 Tablet users (960px+) get the full desktop experience with all tools.</div>
 
             <hr class="section-rule">
 

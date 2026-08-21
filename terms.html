@@ -17,7 +17,9 @@
     .help-content strong { color:#fff; }
     .help-content a { color:#4ecdc4; }
     hr.section-rule { border:none; border-top:1px solid rgba(255,255,255,0.07); margin:36px 0; }
-    @media (max-width: 767px) {
+    /* Must match MOBILE_BREAKPOINT in script.js (960px) -- this page has no
+       JS, so the value can't be shared and has to be kept in sync by hand. */
+    @media (max-width: 959px) {
       body { overflow: auto !important; }
       .top-nav { display: flex !important; }
       .container { height: auto !important; min-height: 100vh; overflow: visible !important; }
