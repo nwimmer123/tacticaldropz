@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TacticalDropz – 40K Deployment Planner</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css">
+  <!-- ?v=YYYYMMDD on styles.css/script.js below bust returning visitors'
+       browser/CDN cache on deploy -- there's no build step to hash these
+       automatically, so bump both query strings (here and at the bottom of
+       this file) to today's date whenever either file changes. Without
+       this, a phone that visited before a deploy can keep running stale
+       JS/CSS indefinitely while a fresh desktop load looks fine, which is
+       exactly what happened investigating error12/error13 in
+       scripts/11e/cache/. -->
+  <link rel="stylesheet" href="styles.css?v=20260820">
 </head>
 <body>
 
@@ -227,6 +235,6 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=20260820"></script>
 </body>
 </html>

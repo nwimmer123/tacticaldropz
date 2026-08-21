@@ -30,6 +30,14 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* 100vh on mobile Safari/Chrome measures the viewport with the address
+     bar collapsed -- taller than what's actually visible when it's shown.
+     Combined with body{overflow:hidden} in the mobile media query below,
+     that extra height becomes permanently unreachable (content clipped at
+     the bottom with no way to scroll to it). 100dvh tracks the real visible
+     viewport; browsers without dvh support ignore this line and keep the
+     100vh above. */
+  height: 100dvh;
 }
 
 .main-content {
@@ -1175,16 +1183,18 @@ input[type="text"]::placeholder { color: #555; }
   .staging-area { display: none !important; }
   .right-sidebar { display: none !important; }
 
-  .container { height: 100vh; }
-  .main-content { height: 100vh; }
-  .canvas-area { height: 100vh; flex: 1; }
-  .canvas-with-sidebar { height: 100vh; flex: 1; position: relative; }
+  /* 100dvh over 100vh throughout this block -- see .container comment above. */
+  .container { height: 100vh; height: 100dvh; }
+  .main-content { height: 100vh; height: 100dvh; }
+  .canvas-area { height: 100vh; height: 100dvh; flex: 1; }
+  .canvas-with-sidebar { height: 100vh; height: 100dvh; flex: 1; position: relative; }
 
   .canvas-wrapper {
     padding: 0 !important;
     flex: 1;
     width: 100%;
     height: 100vh !important;
+    height: 100dvh !important;
     align-items: center !important;
     justify-content: center !important;
     background: #0a0e1a;
