@@ -110,6 +110,33 @@ body {
   flex-shrink: 0;
 }
 
+.left-sidebar.collapsed {
+  width: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+/* Always-present handle to manually reclaim canvas space -- independent of
+   the mobile breakpoint below, e.g. a landscape phone (~900px wide) counts
+   as "desktop" width but still benefits from hiding the Mission panel. */
+.sidebar-collapse-handle {
+  width: 21px;
+  flex-shrink: 0;
+  background: #16213e;
+  border: none;
+  border-right: 2px solid #0f3460;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+  padding: 0;
+}
+
+.sidebar-collapse-handle:hover {
+  background: #1a508b;
+  color: #fff;
+}
+
 .sidebar-header {
   padding: 12px 16px;
   color: #fff;
@@ -170,7 +197,6 @@ body {
 #battlefield {
   display: block;
   cursor: crosshair;
-  image-rendering: crisp-edges;
 }
 
 /* ── Toolbar ── */
@@ -217,6 +243,17 @@ body {
 
 .tool-btn:hover { background: #1a508b; }
 .tool-btn.active { background: #e94560; border-color: #e94560; }
+
+/* Setup mode hides everything about placing models/units -- only the
+   Mission sidebar (mode/edition/disposition/layout pickers) stays, since
+   setup mode reuses those same pickers to load the board. The Mode toggle
+   used to be the toolbar's only non-practice-only content, so with it moved
+   into the sidebar (see buildMissionSidebar()) the whole toolbar row is now
+   practice-only too -- hiding it reclaims that entire row of vertical space
+   for the board, which matters most on short viewports (e.g. a landscape
+   phone) where every row counts. */
+body.setup-mode .practice-only { display: none !important; }
+body.setup-mode .toolbar { display: none !important; }
 
 .tool-btn.loading { color: transparent; position: relative; pointer-events: none; }
 .tool-btn.loading::after {
@@ -1126,12 +1163,14 @@ input[type="text"]::placeholder { color: #555; }
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
-/* ── Responsive — Phone (<768px) ── */
-@media (max-width: 767px) {
+/* ── Responsive — Phone (<960px, incl. landscape phones — must match
+   MOBILE_BREAKPOINT in script.js, CSS can't read a JS constant) ── */
+@media (max-width: 959px) {
   body { overflow: hidden; }
 
   .top-nav { display: none !important; }
   .left-sidebar { display: none !important; }
+  .sidebar-collapse-handle { display: none !important; }
   .toolbar { display: none !important; }
   .staging-area { display: none !important; }
   .right-sidebar { display: none !important; }

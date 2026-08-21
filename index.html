@@ -22,10 +22,12 @@
         <!-- Built dynamically -->
       </div>
 
+      <button class="sidebar-collapse-handle" id="leftSidebarToggle" onclick="toggleLeftSidebar()" title="Collapse mission panel">&lsaquo;</button>
+
       <div class="canvas-area">
 
         <div class="toolbar" id="mainToolbar">
-          <div class="toolbar-section" id="placeModelsSection">
+          <div class="toolbar-section practice-only" id="placeModelsSection">
             <button class="tool-btn active" data-tool="models">🎯 Place Models</button>
             <button class="tool-btn tool-btn-info" onclick="showModelsHelp()" title="How to use Place Models">ⓘ</button>
             <div id="shapePicker" class="shape-picker"></div>
@@ -38,17 +40,17 @@
             </div>
           </div>
 
-          <div class="toolbar-section">
+          <div class="toolbar-section practice-only">
             <input type="text" id="unitName" placeholder="Unit name..." style="width:140px;">
           </div>
 
-          <div class="toolbar-section" id="saveLoadSection">
+          <div class="toolbar-section practice-only" id="saveLoadSection">
             <button class="tool-btn" onclick="clearCanvas()">🗑️ Clear</button>
             <button class="tool-btn" id="saveBtn" onclick="saveDeployment()" style="display:none">💾 Save</button>
             <button class="tool-btn" id="loadBtn" onclick="openDeploymentsModal()" style="display:none">📂 My Deployments</button>
           </div>
 
-          <div class="toolbar-section">
+          <div class="toolbar-section practice-only">
             <button class="tool-btn" id="losAreaBtn">🔦 LoS Area</button>
             <button class="tool-btn" data-tool="measure">📏 Measure</button>
             <div class="toolbar-divider"></div>
@@ -56,7 +58,7 @@
             <button class="tool-btn" data-tool="label">🏷️ Label</button>
           </div>
 
-          <div class="toolbar-section">
+          <div class="toolbar-section practice-only">
             <span class="toolbar-label">Color:</span>
             <div class="color-picker">
               <div class="color-swatch active" style="background:#00ff00" data-color="#00ff00"></div>
@@ -69,7 +71,7 @@
         </div>
 
         <!-- ── Staging Area ── -->
-        <div class="staging-area" id="stagingArea">
+        <div class="staging-area practice-only" id="stagingArea">
           <div class="staging-header">
             <span class="staging-title">📦 Staging Area</span>
             <span class="staging-hint" id="stagingHint">Import a list to begin — or place units directly on the board</span>
@@ -92,7 +94,7 @@
             <button class="mobile-hamburger" id="mobileHamburger" onclick="openMobileMenu()">☰</button>
           </div>
 
-          <div class="right-sidebar" id="rightSidebar">
+          <div class="right-sidebar practice-only" id="rightSidebar">
             <div class="sidebar-header">Units</div>
             <div id="unitsList"></div>
           </div>

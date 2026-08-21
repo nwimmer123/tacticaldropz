@@ -767,6 +767,26 @@ function drawModelGroupLabel(group, isEditing) {
 const IPX = 15; // inches to pixels: 1" = 15px
 // Board: 60" x 44" = 900px x 660px
 
+// Width, in CSS px, below which the touch/mobile layout kicks in (hamburger
+// menu, no toolbar/staging bar, doubled setup-mode font, etc -- see every
+// window.innerWidth < MOBILE_BREAKPOINT check below and the matching
+// `@media (max-width: ...)` block in styles.css, which must stay in sync
+// with this value manually since CSS can't read a JS constant). 960 clears
+// the widest common phone in landscape (iPhone 14/15 Pro Max = 932px) while
+// staying below iPad landscape (1024px) and typical desktop window widths.
+const MOBILE_BREAKPOINT = 960;
+
+// Fixed logical drawing-space size every draw function measures in --
+// intentionally decoupled from canvas.width/canvas.height, which resizeCanvas()
+// now sets to the *device-pixel* backing-store size (CSS display size *
+// devicePixelRatio) so the canvas stays crisp on high-DPI screens and when
+// stretched to fill a wrapper larger than 900x660. drawScene() applies a
+// transform that maps this logical space onto whatever the real backing
+// store size is -- every drawing function below just draws in 0..900 /
+// 0..660 as before and never reads canvas.width/canvas.height directly.
+const LOGICAL_W = 900;
+const LOGICAL_H = 660;
+
 // Sort an array of 4 {x,y} corner points geometrically into [TL, TR, BR, BL]
 // ─── State ────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('battlefield');
@@ -812,6 +832,20 @@ let svgDefs            = null; // loaded once from data/terrain/svgDefs.json
 // 11e (11th edition) layout data
 let e11Layout    = null;
 let e11LayoutSrc = null;
+
+// Table Set Up mode -- toggle next to Place Models. Shows every terrain
+// area's corner (x,y) instead of letting you place models; see
+// setAppMode()/drawSetupModeOverlay() below.
+let appMode           = 'practice'; // 'practice' | 'setup'
+let setupOriginCorner = 'tl';       // 'tl' | 'tr' | 'bl' | 'br' — board corner setup coords are measured from
+const CORNER_HIT_RADIUS = 42; // px -- 3x the original tap target, for easier mobile tapping (drawn marker radius, in drawSetupModeOverlay(), is 30px)
+
+// Setup Mode's canvas text (corner/zone labels) reads fine on desktop but
+// is too small on a phone screen -- double it there. Same MOBILE_BREAKPOINT
+// used everywhere else in the app (see isMobileEvent()).
+function mobileFontScale() {
+  return window.innerWidth < MOBILE_BREAKPOINT ? 2 : 1;
+}
 
 // Edition + 11e disposition-picker state
 let currentEdition      = '11e'; // '11e' | '10e' — 11e is default
@@ -1382,8 +1416,10 @@ function setupCanvasDropZone() {
     if (!draggingPill) return;
 
     const rect   = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    // Map CSS-pixel position to LOGICAL space (not the backing-store pixel
+    // size, which now varies with devicePixelRatio -- see applyCanvasSize()).
+    const scaleX = LOGICAL_W / rect.width;
+    const scaleY = LOGICAL_H / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top)  * scaleY;
 
@@ -1472,6 +1508,7 @@ async function init() {
   bindToolbar();
   updateLosButtonVisibility();
   bindCanvas();
+  restoreLeftSidebarState();
   resizeCanvas();
   setupCanvasDropZone();
   restoreListFromStorage();
@@ -1765,6 +1802,32 @@ function buildMissionSidebar() {
   const sidebar = document.getElementById('leftSidebar');
   sidebar.innerHTML = '';
 
+  // ── MODE (Deployment Practice / Table Set Up) ──
+  // 11e-only -- Setup Mode's corner-coordinate display needs e11Layout's
+  // stored terrain geometry, which 10e layouts don't have (flat images
+  // only). Used to live as its own row above the toolbar (#mainToolbar),
+  // which ate a full row of vertical space even in Setup Mode where it was
+  // the toolbar's only visible content -- moved here instead so Setup Mode
+  // reclaims that whole row (toolbar now fully hidden via
+  // body.setup-mode .toolbar in styles.css).
+  if (currentEdition === '11e') {
+    const modeHeader = document.createElement('div');
+    modeHeader.className = 'sidebar-header';
+    modeHeader.textContent = 'Mode';
+    sidebar.appendChild(modeHeader);
+
+    [{ value: 'practice', label: 'Deployment Practice' }, { value: 'setup', label: 'Table Set Up' }].forEach(mode => {
+      const opt = document.createElement('div');
+      opt.className = 'deploy-option' + (appMode === mode.value ? ' active' : '');
+      opt.textContent = mode.label;
+      opt.onclick = () => {
+        setAppMode(mode.value);
+        buildMissionSidebar();
+      };
+      sidebar.appendChild(opt);
+    });
+  }
+
   // ── EDITION ──
   const editionHeader = document.createElement('div');
   editionHeader.className = 'sidebar-header';
@@ -1983,7 +2046,7 @@ function bindToolbar() {
 }
 
 function bindCanvas() {
-  const isMobileEvent = () => window.innerWidth < 768;
+  const isMobileEvent = () => window.innerWidth < MOBILE_BREAKPOINT;
 
   canvas.addEventListener('mousedown',  e => { if (!isMobileEvent()) handleMouseDown(e); });
   canvas.addEventListener('mousemove',  e => { if (!isMobileEvent()) handleMouseMove(e); });
@@ -1991,6 +2054,52 @@ function bindCanvas() {
   canvas.addEventListener('mouseup',    e => { if (!isMobileEvent()) handleMouseUp(e); });
   canvas.addEventListener('mouseleave', e => { if (!isMobileEvent()) handleMouseUp(e); });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Touch counterpart to the mouse handlers above. The canvas previously had
+  // no touch support at all -- mousedown/move/up were gated OFF below the
+  // mobile breakpoint with nothing routed in to replace them, so nothing on
+  // the board (placing models, drawing, measuring, Setup Mode's
+  // corner-origin taps) was reachable by touch, on a real phone or in
+  // DevTools mobile emulation. Reuses the exact same handlers as the mouse
+  // path -- only the event-to-{x,y} translation and double-tap-as-dblclick
+  // detection are new. preventDefault (with {passive:false}) stops the page
+  // from scrolling/zooming while interacting with the board.
+  let lastTapTime = 0, lastTapPos = null;
+  const DOUBLE_TAP_MS = 350, DOUBLE_TAP_PX = 30;
+
+  canvas.addEventListener('touchstart', e => {
+    if (!isMobileEvent()) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY, button: 0 });
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    if (!isMobileEvent()) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    if (!isMobileEvent()) return;
+    e.preventDefault();
+    handleMouseUp();
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const now = Date.now();
+    const pos = { x: touch.clientX, y: touch.clientY };
+    if (lastTapPos && now - lastTapTime < DOUBLE_TAP_MS && Math.hypot(pos.x - lastTapPos.x, pos.y - lastTapPos.y) < DOUBLE_TAP_PX) {
+      handleDoubleClick();
+      lastTapTime = 0;
+      lastTapPos = null;
+    } else {
+      lastTapTime = now;
+      lastTapPos = pos;
+    }
+  }, { passive: false });
 }
 
 // ─── Selection Handlers ───────────────────────────────────────────────────────
@@ -2016,9 +2125,50 @@ function selectLayout(index) {
   else drawScene();
 }
 
+// Lets a player manually reclaim canvas space by hiding the Mission panel --
+// independent of MOBILE_BREAKPOINT, e.g. a desktop/laptop window narrower
+// than usual but still above the mobile threshold. Persisted so it survives
+// a reload/browser restart.
+const LEFT_SIDEBAR_COLLAPSED_KEY = 'tacticaldropz_leftSidebarCollapsed';
+
+function setLeftSidebarCollapsed(collapsed) {
+  document.getElementById('leftSidebar').classList.toggle('collapsed', collapsed);
+  const btn = document.getElementById('leftSidebarToggle');
+  btn.innerHTML = collapsed ? '&rsaquo;' : '&lsaquo;';
+  btn.title = collapsed ? 'Show mission panel' : 'Collapse mission panel';
+}
+
+function toggleLeftSidebar() {
+  const collapsed = !document.getElementById('leftSidebar').classList.contains('collapsed');
+  setLeftSidebarCollapsed(collapsed);
+  localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+  resizeCanvas();
+  drawScene();
+}
+
+function restoreLeftSidebarState() {
+  if (localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_KEY) === '1') setLeftSidebarCollapsed(true);
+}
+
+// Active-state highlighting for the Mode toggle lives wherever it's rendered
+// (left sidebar via buildMissionSidebar(), mobile menu via buildMobileMenu())
+// -- callers re-render whichever of those is on screen after calling this,
+// same pattern as selectEdition().
+function setAppMode(mode) {
+  appMode = mode;
+  document.body.classList.toggle('setup-mode', mode === 'setup');
+  if (mode === 'setup') hideDrawingHint();
+  else updateHintForTool();
+  drawScene();
+}
+
 function selectEdition(edition) {
   currentEdition = edition;
   updateLosButtonVisibility();
+  // Setup Mode is 11e-only (see buildMissionSidebar()) and its "Mode" picker
+  // disappears once you're off 11e -- fall back to Practice Mode so leaving
+  // 11e can't strand the toolbar hidden with no way back to it.
+  if (edition !== '11e' && appMode === 'setup') setAppMode('practice');
   if (edition === '11e') {
     loadE11Layout(); // clears/no-ops until all 3 picks (my/opp/layout) exist
   } else {
@@ -2123,7 +2273,15 @@ function inchPointsToPx(pts) {
 
 // ─── Draw Scene ───────────────────────────────────────────────────────────────
 function drawScene() {
+  // Reset to identity to clear the FULL backing store (clearRect is affected
+  // by the current transform same as any other draw call), then scale so
+  // every draw function below can keep measuring in LOGICAL_W x LOGICAL_H
+  // regardless of the backing store's real device-pixel size (see
+  // applyCanvasSize() in resizeCanvas()).
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const renderScale = canvas.width / LOGICAL_W;
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
 
   drawBackground();
   drawGrid();
@@ -2131,6 +2289,7 @@ function drawScene() {
   drawObjectives();
   if (TERRAIN_OVERLAY_ENABLED && currentEdition !== '11e') drawTerrainOverlay();
   if (currentEdition === '11e' && e11Layout) drawE11Layout();
+  if (appMode === 'setup') drawSetupModeOverlay();
   drawLosArea();
   drawUserDrawings();
   drawInProgressPoints();
@@ -2142,46 +2301,46 @@ function drawBackground() {
     // fill here so the old gw/wtc art (currentTerrainFormat is untouched
     // while in this edition) doesn't paint underneath it.
     ctx.fillStyle = '#2a3448';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
     return;
   }
   if (currentTerrainFormat === 'gw') {
     if (terrainOverlay) {
       // Terrain overlay replaces the image — use a neutral board color
       ctx.fillStyle = '#2a3448';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
       return;
     }
     const img = terrainImages[currentLayoutIndex];
     if (img && img.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, LOGICAL_W, LOGICAL_H);
       return;
     }
   }
   if (currentTerrainFormat === 'wtc' && wtcImage) {
-    ctx.drawImage(wtcImage, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(wtcImage, 0, 0, LOGICAL_W, LOGICAL_H);
     return;
   }
   ctx.fillStyle = '#efefef';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 }
 
 function drawGrid() {
   ctx.strokeStyle = 'rgba(0,0,0,0.12)';
   ctx.lineWidth = 0.5;
-  for (let x = 0; x <= canvas.width; x += IPX) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  for (let x = 0; x <= LOGICAL_W; x += IPX) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, LOGICAL_H); ctx.stroke();
   }
-  for (let y = 0; y <= canvas.height; y += IPX) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  for (let y = 0; y <= LOGICAL_H; y += IPX) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(LOGICAL_W, y); ctx.stroke();
   }
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
   ctx.lineWidth = 0.75;
-  for (let x = 0; x <= canvas.width; x += IPX * 6) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  for (let x = 0; x <= LOGICAL_W; x += IPX * 6) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, LOGICAL_H); ctx.stroke();
   }
-  for (let y = 0; y <= canvas.height; y += IPX * 6) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  for (let y = 0; y <= LOGICAL_H; y += IPX * 6) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(LOGICAL_W, y); ctx.stroke();
   }
 }
 
@@ -2410,9 +2569,9 @@ function getE11ObjectiveIcon(iconKey) {
 // by drawE11Layout() and the LOS geometry engine so both agree on exactly
 // where the board sits on the canvas.
 function getE11Transform() {
-  const scale = Math.min(canvas.width / e11Layout.boardWidth, canvas.height / e11Layout.boardHeight);
-  const offsetX = (canvas.width - e11Layout.boardWidth * scale) / 2;
-  const offsetY = (canvas.height - e11Layout.boardHeight * scale) / 2;
+  const scale = Math.min(LOGICAL_W / e11Layout.boardWidth, LOGICAL_H / e11Layout.boardHeight);
+  const offsetX = (LOGICAL_W - e11Layout.boardWidth * scale) / 2;
+  const offsetY = (LOGICAL_H - e11Layout.boardHeight * scale) / 2;
   return {
     scale, offsetX, offsetY,
     toPx:     (x, y)   => [x * scale + offsetX, y * scale + offsetY],
@@ -2460,6 +2619,278 @@ function drawE11Layout() {
       ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
     });
   }
+}
+
+// ─── Table Set Up Mode ──────────────────────────────────────────────────────
+// Shows every terrain area's corner (x,y), measured from whichever board
+// corner is currently the origin (setupOriginCorner). Clicking one of the 4
+// board-corner markers (handled in handleMouseDown()) re-origins every label
+// -- lets a player walk around the table and read measurements relative to
+// the corner they're standing at, since official layout instructions often
+// only give one reference corner. 10e layouts have no stored terrain
+// coordinates (just flat images), so this only works for 11e.
+function boardCornerInches(corner, bw, bh) {
+  switch (corner) {
+    case 'tr': return [bw, 0];
+    case 'bl': return [0, bh];
+    case 'br': return [bw, bh];
+    default:   return [0, 0]; // 'tl'
+  }
+}
+
+// Re-expresses a board-inch point as (x,y) distance from setupOriginCorner
+// along that corner's two edges, so every label reads "X" this way, Y" that
+// way from where you're standing" no matter which corner is selected.
+function originAdjustedCoords(bx, by, bw, bh) {
+  const x = (setupOriginCorner === 'tr' || setupOriginCorner === 'br') ? bw - bx : bx;
+  const y = (setupOriginCorner === 'bl' || setupOriginCorner === 'br') ? bh - by : by;
+  return [x, y];
+}
+
+// Table-setup measurements are read off a physical measuring tape, which
+// marks quarter inches -- round to the nearest .25 so the label matches a
+// mark you can actually find, instead of a fraction you'd have to guess at.
+function roundQuarterInch(n) {
+  return Math.round(n * 4) / 4;
+}
+
+// Whole numbers read cleaner without a trailing ".00" -- only show decimals
+// when they're actually carrying information (a quarter/half/three-quarter
+// mark).
+function formatQuarterInch(n) {
+  const r = roundQuarterInch(n);
+  return Number.isInteger(r) ? `${r}` : r.toFixed(2);
+}
+
+// Every area's corner points are precomputed once in the extraction
+// pipeline (scripts/11e/06_add_area_rects.py) and baked into the layout
+// JSON as `cornerPoints` -- client-side heuristics kept getting fooled by
+// things that turned out to be real: decorative nubs on otherwise-straight
+// edges, pieces placed at a genuine angle on some layouts, and a handful of
+// genuinely irregular (non-rectangular) areas. Most areas get a 4-point
+// oriented rectangle; a few get a simplified N-point polygon instead when a
+// rectangle is a bad fit for the actual shape (see RECT_FIT_THRESHOLD in
+// the pipeline script) -- this is just a lookup either way, no assumption
+// here that it's always exactly 4 points.
+function getAreaCorners(area) {
+  return area.cornerPoints;
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// Corner labels cluster tightly wherever several terrain pieces meet, so
+// placing every box dead-center above its point produces stacked/overlapping
+// text. Nudges each box out to the nearest bit of open space instead, trying
+// candidate offsets around the point at increasing distance and keeping the
+// first one that doesn't collide with a box already placed (falls back to
+// straight-above, overlapping, only if every candidate is taken). An
+// optional `bias` [dx,dy] direction (e.g. outward from the board center for
+// deployment-zone corners) reorders the candidate offsets to prefer that
+// general direction first, before falling back to the full ring.
+function placeLabelBoxes(items, scale = 1) {
+  const placed = [];
+  const OFFSETS = [
+    [0, -20], [0, 20], [26, -20], [-26, -20], [26, 20], [-26, 20],
+    [38, 0], [-38, 0], [0, -38], [0, 38],
+    [26, -38], [-26, -38], [26, 38], [-26, 38],
+  ].map(([dx, dy]) => [dx * scale, dy * scale]);
+  return items.map(({ px, py, w, h, bias }) => {
+    let offsets = OFFSETS;
+    if (bias && (bias[0] || bias[1])) {
+      offsets = [...OFFSETS].sort((a, b) =>
+        (b[0] * bias[0] + b[1] * bias[1]) - (a[0] * bias[0] + a[1] * bias[1]));
+    }
+    let box = null;
+    for (let step = 0; step < 4 && !box; step++) {
+      const mult = 1 + step * 0.85;
+      for (const [dx, dy] of offsets) {
+        const cx = px + dx * mult, cy = py + dy * mult;
+        const candidate = { x: cx - w / 2, y: cy - h / 2, w, h };
+        if (!placed.some(r => rectsOverlap(candidate, r))) { box = candidate; break; }
+      }
+    }
+    if (!box) box = { x: px - w / 2, y: py - 28 * scale, w, h };
+    placed.push(box);
+    return box;
+  });
+}
+
+// Which board edge a deployment zone is attached to, and how deep it
+// reaches from that edge -- e.g. a zone flush with y=0 that reaches down to
+// y=12 is a "top" zone, 12" deep. Zones only ever attach to one outer edge
+// in practice (see [[project_setup_mode_area_corners]] memory), so this
+// just checks which of the 4 board edges the zone's bounding extent touches.
+function zoneEdgeAndDepth(zone, bw, bh) {
+  const xs = zone.points.map(p => p[0]), ys = zone.points.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const EPS = 0.5;
+  if (minX <= EPS) return { edge: 'left', depth: maxX };
+  if (maxX >= bw - EPS) return { edge: 'right', depth: bw - minX };
+  if (minY <= EPS) return { edge: 'top', depth: maxY };
+  if (maxY >= bh - EPS) return { edge: 'bottom', depth: bh - minY };
+  return null;
+}
+
+// One yellow dimension line per deployment zone, offset into the canvas
+// margin just outside the board edge the zone attaches to, spanning from
+// that edge to the zone's inner (deployment-line) boundary -- matches how
+// zones are actually described in mission rules ("within X inches of your
+// board edge") and is far less cluttered than labeling every corner of a
+// zone that can have an irregular/stepped shape.
+function drawZoneDepthMarkers() {
+  const { toPx: tx } = getE11Transform();
+  const { boardWidth: bw, boardHeight: bh } = e11Layout;
+  const fontScale = mobileFontScale();
+  const MARGIN = 20; // px, offset from the board edge into the canvas margin
+
+  ctx.strokeStyle = '#ffd200';
+  ctx.fillStyle = '#ffd200';
+  ctx.lineWidth = 2;
+  ctx.font = `bold ${12 * fontScale}px sans-serif`;
+
+  (e11Layout.zones || []).forEach(zone => {
+    const info = zoneEdgeAndDepth(zone, bw, bh);
+    if (!info) return;
+    const label = `${formatQuarterInch(info.depth)}"`;
+
+    if (info.edge === 'top' || info.edge === 'bottom') {
+      // Depth runs vertically -- draw a vertical line in the left margin.
+      const edgeY = info.edge === 'top' ? 0 : bh;
+      const farY = info.edge === 'top' ? info.depth : bh - info.depth;
+      const [px0, py0] = tx(0, edgeY);
+      const [, py1] = tx(0, farY);
+      const lineX = px0 - MARGIN;
+      ctx.beginPath();
+      ctx.moveTo(lineX, py0);
+      ctx.lineTo(lineX, py1);
+      ctx.stroke();
+      [py0, py1].forEach(py => {
+        ctx.beginPath();
+        ctx.moveTo(lineX - 4, py);
+        ctx.lineTo(lineX + 4, py);
+        ctx.stroke();
+      });
+      ctx.save();
+      ctx.translate(lineX - 8 * fontScale, (py0 + py1) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    } else {
+      // Depth runs horizontally -- draw a horizontal line in the top margin.
+      const edgeX = info.edge === 'left' ? 0 : bw;
+      const farX = info.edge === 'left' ? info.depth : bw - info.depth;
+      const [px0, py0] = tx(edgeX, 0);
+      const [px1] = tx(farX, 0);
+      const lineY = py0 - MARGIN;
+      ctx.beginPath();
+      ctx.moveTo(px0, lineY);
+      ctx.lineTo(px1, lineY);
+      ctx.stroke();
+      [px0, px1].forEach(px => {
+        ctx.beginPath();
+        ctx.moveTo(px, lineY - 4);
+        ctx.lineTo(px, lineY + 4);
+        ctx.stroke();
+      });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(label, (px0 + px1) / 2, lineY - 8 * fontScale);
+    }
+  });
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawSetupModeOverlay() {
+  const fontScale = mobileFontScale();
+
+  if (currentEdition !== '11e' || !e11Layout) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = `${14 * fontScale}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Select 11th Edition + dispositions + a layout to see setup coordinates',
+      LOGICAL_W / 2, LOGICAL_H / 2);
+    ctx.textAlign = 'left';
+    return;
+  }
+
+  const { toPx: tx } = getE11Transform();
+  const { boardWidth: bw, boardHeight: bh } = e11Layout;
+
+  // Every other area-corner point in board inches -- corners are ordered
+  // around the shape's perimeter, so for a 4-corner rectangle this keeps
+  // just two OPPOSITE corners (e.g. top-left + bottom-right), enough to
+  // fully place it, at half the label clutter. Also dedupes points shared
+  // by adjacent area polygons so a shared edge doesn't draw the same label
+  // twice on top of itself.
+  const corners = [];
+  (e11Layout.areas || []).forEach(area => {
+    getAreaCorners(area).filter((_, i) => i % 2 === 0).forEach(([x, y]) => {
+      if (!corners.some(c => Math.hypot(c[0] - x, c[1] - y) < 2)) corners.push([x, y]);
+    });
+  });
+
+  ctx.font = `bold ${11 * fontScale}px sans-serif`;
+  const labelText = (bx2, by2) => {
+    const [x, y] = originAdjustedCoords(bx2, by2, bw, bh);
+    return `${formatQuarterInch(x)}", ${formatQuarterInch(y)}"`;
+  };
+  const labelItems = corners.map(([bx2, by2]) => {
+    const [px, py] = tx(bx2, by2);
+    const text = labelText(bx2, by2);
+    return { px, py, text, w: ctx.measureText(text).width + 8 * fontScale, h: 16 * fontScale };
+  });
+  const boxes = placeLabelBoxes(labelItems, fontScale);
+
+  labelItems.forEach(({ px, py, text }, i) => {
+    const box = boxes[i];
+    const boxCx = box.x + box.w / 2, boxCy = box.y + box.h / 2;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 3 * fontScale, 0, Math.PI * 2);
+    ctx.fillStyle = '#e94560';
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(15,15,25,0.85)';
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, boxCx, boxCy);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  });
+
+  drawZoneDepthMarkers();
+
+  // Board-corner origin markers -- 3x the original radius so they're easy
+  // to tap on mobile (hit-test in handleMouseDown() uses CORNER_HIT_RADIUS,
+  // kept in sync with this).
+  ['tl', 'tr', 'bl', 'br'].forEach(corner => {
+    const [bx2, by2] = boardCornerInches(corner, bw, bh);
+    const [px, py] = tx(bx2, by2);
+    const isOrigin = corner === setupOriginCorner;
+    ctx.beginPath();
+    ctx.arc(px, py, 30, 0, Math.PI * 2);
+    ctx.fillStyle = isOrigin ? '#e94560' : 'rgba(233,69,96,0.25)';
+    ctx.fill();
+    ctx.strokeStyle = '#e94560';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (isOrigin) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${10 * fontScale}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('0,0', px, py + 3 * fontScale);
+      ctx.textAlign = 'left';
+    }
+  });
 }
 
 // ─── 11e Line of Sight ──────────────────────────────────────────────────────
@@ -2532,7 +2963,17 @@ function circleOverlapsPolygon(cx, cy, r, pts) {
 // containment (piece centroid inside myArea's polygon) instead of featureId
 // for matching a dense piece to "my" area.
 function collectLosBlockers(ox, oy, radius) {
-  const areas = (e11Layout.areas || []).map(a => ({ pts: parseAreaPath(a.d) }));
+  // Blocking geometry uses each area's precomputed corners (cornerPoints,
+  // baked in by scripts/11e/06_add_area_rects.py -- a 4-point rectangle for
+  // most areas, a simplified true polygon for the few genuinely irregular
+  // ones), not the exact jagged silhouette (`d`, still used for on-canvas
+  // rendering) -- the exact shape ran to ~1,000 points on some areas, all
+  // re-walked on every single LoS cast, which was a real chunk of why this
+  // was slow. Approximating a rectangular piece's footprint as a rectangle
+  // is intentional, not an oversight: real physical terrain trays are
+  // rectangular anyway, and any interior notch/nub is narrower than a
+  // model's base so it rarely changes a real LoS verdict either way.
+  const areas = (e11Layout.areas || []).map(a => ({ pts: a.cornerPoints }));
   const myArea = areas.find(a => circleOverlapsPolygon(ox, oy, radius, a.pts));
   const segments = [];
   const addPoly = pts => pts.forEach((p, i) => {
@@ -2780,9 +3221,10 @@ function drawInProgressPoints() {
 // ─── Canvas Event Handlers ────────────────────────────────────────────────────
 function getCanvasPoint(e) {
   const rect = canvas.getBoundingClientRect();
+  // LOGICAL space, not backing-store pixels -- see applyCanvasSize().
   return {
-    x: (e.clientX - rect.left) * (canvas.width / rect.width),
-    y: (e.clientY - rect.top) * (canvas.height / rect.height)
+    x: (e.clientX - rect.left) * (LOGICAL_W / rect.width),
+    y: (e.clientY - rect.top) * (LOGICAL_H / rect.height)
   };
 }
 
@@ -2830,6 +3272,23 @@ function distToSegment(px, py, ax, ay, bx, by) {
 
 function handleMouseDown(e) {
   const { x, y } = getCanvasPoint(e);
+
+  if (appMode === 'setup') {
+    if (currentEdition === '11e' && e11Layout) {
+      const { toPx: tx } = getE11Transform();
+      const { boardWidth: bw, boardHeight: bh } = e11Layout;
+      for (const corner of ['tl', 'tr', 'bl', 'br']) {
+        const [bx, by] = boardCornerInches(corner, bw, bh);
+        const [px, py] = tx(bx, by);
+        if (Math.hypot(x - px, y - py) < CORNER_HIT_RADIUS) {
+          setupOriginCorner = corner;
+          drawScene();
+          return;
+        }
+      }
+    }
+    return; // no model/draw/measure interaction while in setup mode
+  }
 
   // Right-click on measure/label: delete it
   if (e.button === 2 && (currentTool === 'measure' || currentTool === 'label')) {
@@ -3171,7 +3630,8 @@ function updateUnitsList() {
 
 // ─── Hints ────────────────────────────────────────────────────────────────────
 function showDrawingHint(text) {
-  if (window.innerWidth < 768) return;
+  if (window.innerWidth < MOBILE_BREAKPOINT) return;
+  if (appMode === 'setup') return; // no model/draw/measure tools to hint about in setup mode
   const wrapper = document.getElementById('canvasWrapper');
   if (!hintElement) {
     hintElement = document.createElement('div');
@@ -3401,18 +3861,35 @@ function clearCanvas() {
 }
 
 // ─── Resize ───────────────────────────────────────────────────────────────────
+// Sets both the CSS display size (cssW/cssH, unchanged logic from before) AND
+// the canvas's backing-store pixel size (canvas.width/height) to match it at
+// native device-pixel density -- previously the backing store stayed fixed at
+// 900x660 while CSS stretched it to fill the (usually much larger) wrapper,
+// so the browser had to upscale a low-res bitmap, blurring/pixelating every
+// line and label. drawScene() compensates with a transform so every drawing
+// function can keep measuring in the fixed LOGICAL_W x LOGICAL_H space.
+function applyCanvasSize(cssW, cssH) {
+  canvas.style.width  = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  // Cap at 2x -- drawScene() redraws the whole board on every mousemove
+  // while dragging a model, so an uncapped 3x/4x DPR on a large 4K/5K
+  // display would multiply that per-frame cost for a sharpness gain past
+  // 2x that's barely visible anyway.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.max(1, Math.round(cssW * dpr));
+  canvas.height = Math.max(1, Math.round(cssH * dpr));
+}
+
 function resizeCanvas() {
-  const isMobile = window.innerWidth < 768;
+  const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
   if (isMobile) {
     const ratio = 900 / 660;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     if (vw / vh > ratio) {
-      canvas.style.height = vh + 'px';
-      canvas.style.width  = (vh * ratio) + 'px';
+      applyCanvasSize(vh * ratio, vh);
     } else {
-      canvas.style.width  = vw + 'px';
-      canvas.style.height = (vw / ratio) + 'px';
+      applyCanvasSize(vw, vw / ratio);
     }
     return;
   }
@@ -3421,11 +3898,9 @@ function resizeCanvas() {
   const H = wrapper.clientHeight - 8;
   const ratio = 900 / 660;
   if (W / H > ratio) {
-    canvas.style.height = H + 'px';
-    canvas.style.width = (H * ratio) + 'px';
+    applyCanvasSize(H * ratio, H);
   } else {
-    canvas.style.width = W + 'px';
-    canvas.style.height = (W / ratio) + 'px';
+    applyCanvasSize(W, W / ratio);
   }
 }
 
@@ -3488,6 +3963,21 @@ function buildMobileMenu() {
   boardHeader.textContent = 'Board';
   menu.appendChild(boardHeader);
 
+  // Mode toggle -- mirrors the desktop toolbar's Deployment Practice /
+  // Table Set Up toggle, which lives in #mainToolbar and is CSS-hidden on
+  // mobile (.toolbar{display:none}), so without this there was no way to
+  // reach Setup Mode on a phone at all.
+  [{ value: 'practice', label: '🎯 Deployment Practice' }, { value: 'setup', label: '📐 Table Set Up' }].forEach(mode => {
+    const btn = document.createElement('button');
+    btn.className = 'mobile-menu-btn' + (appMode === mode.value ? ' active' : '');
+    btn.textContent = mode.label;
+    btn.onclick = () => {
+      setAppMode(mode.value);
+      buildMobileMenu();
+    };
+    menu.appendChild(btn);
+  });
+
   const aboutBtn = document.createElement('a');
   aboutBtn.href = 'about.html';
   aboutBtn.className = 'mobile-menu-btn';
@@ -3496,24 +3986,28 @@ function buildMobileMenu() {
   aboutBtn.textContent = '❓ About & Help';
   menu.appendChild(aboutBtn);
 
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'mobile-menu-btn';
-  clearBtn.textContent = '🗑️ Clear Board';
-  clearBtn.onclick = () => { closeMobileMenu(); clearCanvas(); };
-  menu.appendChild(clearBtn);
+  // Clear/Save/Load only make sense for placed models, same as the desktop
+  // toolbar's practice-only sections.
+  if (appMode === 'practice') {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'mobile-menu-btn';
+    clearBtn.textContent = '🗑️ Clear Board';
+    clearBtn.onclick = () => { closeMobileMenu(); clearCanvas(); };
+    menu.appendChild(clearBtn);
 
-  if (isPro()) {
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'mobile-menu-btn';
-    saveBtn.textContent = '💾 Save Deployment';
-    saveBtn.onclick = () => { closeMobileMenu(); saveDeployment(); };
-    menu.appendChild(saveBtn);
+    if (isPro()) {
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'mobile-menu-btn';
+      saveBtn.textContent = '💾 Save Deployment';
+      saveBtn.onclick = () => { closeMobileMenu(); saveDeployment(); };
+      menu.appendChild(saveBtn);
 
-    const loadBtn = document.createElement('button');
-    loadBtn.className = 'mobile-menu-btn';
-    loadBtn.textContent = '📂 My Deployments';
-    loadBtn.onclick = () => { closeMobileMenu(); openDeploymentsModal(); };
-    menu.appendChild(loadBtn);
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'mobile-menu-btn';
+      loadBtn.textContent = '📂 My Deployments';
+      loadBtn.onclick = () => { closeMobileMenu(); openDeploymentsModal(); };
+      menu.appendChild(loadBtn);
+    }
   }
 
   // ── EDITION ──
