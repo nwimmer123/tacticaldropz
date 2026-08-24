@@ -2994,17 +2994,39 @@ function collectLosBlockers(ox, oy, radius) {
     segments.push([p[0], p[1], q[0], q[1]]);
   });
 
-  areas.forEach(a => { if (a !== myArea) addPoly(a.pts); });
-  if (myArea) {
-    (e11Layout.pieces || [])
-      .filter(p => p.terrainType === 'dense')
-      .forEach(p => {
-        const piecePts = parseAreaPath(p.d);
-        const cx = piecePts.reduce((s, pt) => s + pt[0], 0) / piecePts.length;
-        const cy = piecePts.reduce((s, pt) => s + pt[1], 0) / piecePts.length;
-        if (pointInPolygon(cx, cy, myArea.pts)) addPoly(piecePts);
-      });
-  }
+  // Area terrain (the tan/gray footprint -- rubble, ruins, hills, etc.) is
+  // NOT a solid wall: you can see INTO it from outside. It only blocks LoS
+  // to something on the far side of the whole footprint, the way real area
+  // terrain screens what's behind it without hiding what's inside it. So
+  // for every area other than the one the viewer is standing in, only its
+  // back-facing edges (the ones facing away from the viewer) are added as
+  // blockers -- front-facing edges are skipped so rays pass straight in
+  // instead of stopping dead at the near wall.
+  const addFarEdges = pts => {
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    pts.forEach((p, i) => {
+      const q = pts[(i + 1) % pts.length];
+      const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+      let nx = -(q[1] - p[1]), ny = (q[0] - p[0]);
+      if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; } // point outward
+      const facesViewer = (ox - mx) * nx + (oy - my) * ny > 0;
+      if (!facesViewer) segments.push([p[0], p[1], q[0], q[1]]);
+    });
+  };
+  areas.forEach(a => { if (a !== myArea) addFarEdges(a.pts); });
+
+  // Dense terrain (buildings/forests, rendered green) IS fully opaque and
+  // always blocks LoS on its own, regardless of which area (if any) it
+  // sits inside -- this used to only be added for pieces inside the
+  // viewer's own area, relying on other areas' full rectangles to catch
+  // the rest, but now that other areas only block on their far side, dense
+  // pieces need to block unconditionally so they're not skipped near an
+  // area's front edge.
+  (e11Layout.pieces || [])
+    .filter(p => p.terrainType === 'dense')
+    .forEach(p => addPoly(parseAreaPath(p.d)));
+
   addPoly([
     [0, 0], [e11Layout.boardWidth, 0],
     [e11Layout.boardWidth, e11Layout.boardHeight], [0, e11Layout.boardHeight],
