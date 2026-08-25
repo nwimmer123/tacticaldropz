@@ -384,19 +384,21 @@ function showModelsHelp() {
 const BASE_SIZES = [
   { key:'25',      w:25,  h:25,  shape:'circle'    },
   { key:'28',      w:28,  h:28,  shape:'circle'    },
+  { key:'28.5',    w:28.5,h:28.5,shape:'circle'    },
   { key:'32',      w:32,  h:32,  shape:'circle'    },
   { key:'40',      w:40,  h:40,  shape:'circle'    },
   { key:'50',      w:50,  h:50,  shape:'circle'    },
   { key:'60',      w:60,  h:60,  shape:'circle'    },
-  { key:'60x35o',  w:60,  h:35,  shape:'oval'      },
+  { key:'60x35o',  w:60,  h:35.5,shape:'oval'      },
   { key:'70',      w:70,  h:70,  shape:'circle'    },
   { key:'75x42o',  w:75,  h:42,  shape:'oval'      },
   { key:'80',      w:80,  h:80,  shape:'circle'    },
   { key:'90',      w:90,  h:90,  shape:'circle'    },
-  { key:'90x52o',  w:90,  h:52,  shape:'oval'      },
+  { key:'90x52o',  w:90,  h:52.5,shape:'oval'      },
   { key:'100',     w:100, h:100, shape:'circle'    },
   { key:'105x70o', w:105, h:70,  shape:'oval'      },
   { key:'105x70r', w:105, h:70,  shape:'rectangle' },
+  { key:'120',     w:120, h:120, shape:'circle'    },
   { key:'120x92o', w:120, h:92,  shape:'oval'      },
   { key:'120x92r', w:120, h:92,  shape:'rectangle' },
   { key:'78x116r', w:78,  h:116, shape:'rectangle' },
@@ -405,7 +407,7 @@ const BASE_SIZES = [
   { key:'150x95o', w:150, h:95,  shape:'oval'      },
   { key:'150x95r', w:150, h:95,  shape:'rectangle' },
   { key:'160',     w:160, h:160, shape:'circle'    },
-  { key:'170x105o',w:170, h:105, shape:'oval'      },
+  { key:'170x105o',w:170, h:109, shape:'oval'      },
   { key:'170x105r',w:170, h:105, shape:'rectangle' },
 ];
 
@@ -994,7 +996,30 @@ function inferCategory(unitName) {
   return 'other';
 }
 
-function inferBaseSize(unitName, category) {
+// Strip import-only annotations (e.g. "[Legends]") before matching against the
+// official base-size chart, which never carries this kind of list-builder tag.
+function normalizeUnitNameForLookup(unitName) {
+  return unitName.toLowerCase().replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+}
+
+function lookupOfficialBaseSize(unitName, faction) {
+  if (typeof OFFICIAL_BASE_SIZES_FLAT === 'undefined') return null;
+  const name = normalizeUnitNameForLookup(unitName);
+
+  if (faction) {
+    const factionSlug = faction.trim().toLowerCase().replace(/\s+/g, '-');
+    const nameSlug     = name.replace(/\s+/g, '-');
+    const qualified    = OFFICIAL_BASE_SIZES_QUALIFIED[`${factionSlug}::${nameSlug}`];
+    if (qualified) return qualified;
+  }
+
+  return OFFICIAL_BASE_SIZES_FLAT[name] || null;
+}
+
+function inferBaseSize(unitName, category, faction) {
+  const official = lookupOfficialBaseSize(unitName, faction);
+  if (official) return official;
+
   const n = unitName.toLowerCase();
   // Vehicles on rectangular bases
   if (/land raider|land raider crusader|predator|vindicator|rhino|razorback|chimera|leman russ|trukk|devilfish|hammerhead|wave serpent|ghost ark|doomsday ark/.test(n)) return '105x70r';
@@ -1051,7 +1076,7 @@ function parseNewRecruit(text) {
         count,
         points,
         category,
-        baseSizeKey:     inferBaseSize(name, category),
+        baseSizeKey:     inferBaseSize(name, category, faction),
         deploymentState: 'staging',
         warlord:         false,
         keywords:        [],
@@ -1145,7 +1170,7 @@ function parseGwApp(text) {
           count,
           points,
           category,
-          baseSizeKey:     inferBaseSize(name, category),
+          baseSizeKey:     inferBaseSize(name, category, faction),
           deploymentState: 'staging',
           warlord:         false,
           keywords:        [],
