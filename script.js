@@ -1038,8 +1038,8 @@ function parseNewRecruit(text) {
     // Skip total points line
     if (/^total\s*points?/i.test(line) || /^\d+\s*\/\s*\d+\s*pts/i.test(line)) continue;
 
-    // "10x Unit Name (pts)" or "[10]x Unit Name (pts)" or "Unit Name (pts)"
-    const unitMatch = line.match(/^(?:\[?(\d+)\]?x\s+)?(.+?)\s*\((\d+)\s*(?:pts?)?\).*$/i);
+    // "10x Unit Name (N pts)" or "[10]x Unit Name (N pts)" or "Unit Name (N pts)"
+    const unitMatch = line.match(/^(?:\[?(\d+)\]?x\s+)?(.+?)\s*\((\d+)\s*pts?\)\s*$/i);
     if (unitMatch) {
       const count    = parseInt(unitMatch[1] || '1');
       const name     = unitMatch[2].trim();
@@ -1067,23 +1067,29 @@ function parseNewRecruit(text) {
 // Category headers to skip, units as "Unit Name (pts)"
 
 function countModelsFromBlock(block) {
-  // Logic: in GW App export, "• Nx Name" = a model entry.
-  // Weapon/wargear lines immediately follow WITHOUT their own leading "•" at the same level,
-  // OR are sub-bullets that come before the next top-level "•".
-  // So: only count entries that start with "•" — the first token after • is the model count.
-  // Then check: does the NEXT "•" entry come before any non-bulleted Nx line?
-  // Simplest reliable rule: split on "•", each segment starts with the model entry.
-  // First line of each segment = "Nx ModelName" — that's the model.
-  // Remaining lines = weapons (ignore).
+  // GW App export uses "•" for bullets at multiple indent depths. A model-type
+  // entry looks like "  • Nx ModelName" and, for multi-model squads, has its own
+  // NESTED "•" bullets underneath listing wargear (e.g. "    • Nx Weapon").
+  // Single-model units (characters, most vehicles) never have nested "•" bullets —
+  // their wargear is either a lone top-level bullet or plain unbulleted continuation
+  // lines — so those should always count as 1 model, regardless of any "Nx" numbers
+  // found in their wargear lines.
+  const bulletLines = [];
+  for (const raw of block.split('\n')) {
+    const m = raw.match(/^(\s*)•\s*(.*)$/);
+    if (m) bulletLines.push({ indent: m[1].length, content: m[2].trim() });
+  }
+  if (bulletLines.length === 0) return 1;
 
-  const segments = block.split('•').map(s => s.trim()).filter(s => s.length > 0);
+  const minIndent  = Math.min(...bulletLines.map(b => b.indent));
+  const hasNested  = bulletLines.some(b => b.indent > minIndent);
+  if (!hasNested) return 1;
+
   let total = 0;
-  for (const seg of segments) {
-    // First token pattern: "Nx Something"
-    const m = seg.match(/^(\d+)x\s+(.+?)(?:\s{2,}|$)/);
-    if (m) {
-      total += parseInt(m[1]);
-    }
+  for (const b of bulletLines) {
+    if (b.indent !== minIndent) continue;
+    const m = b.content.match(/^(\d+)x\s+/);
+    if (m) total += parseInt(m[1]);
   }
   return total > 0 ? total : 1;
 }
@@ -1094,41 +1100,63 @@ function parseGwApp(text) {
     'FORTIFICATIONS', 'ALLIED UNITS', 'EPIC HEROES', 'VEHICLES', 'MONSTERS',
   ];
 
-  const unitBlockRegex = /([A-Za-z][A-Za-z\s'\-]+?)\s*\((\d+)\s*points?\)(.*?)(?=(?:[A-Za-z][A-Za-z\s'\-]+?\s*\(\d+\s*points?\))|$)/gs;
-  const blocks = [...text.matchAll(unitBlockRegex)];
-
   let faction = 'Unknown', detachment = null;
   const factionMatch = text.match(/(Grey Knights|Space Marines|Chaos Space Marines|Death Guard|Thousand Sons|World Eaters|Necrons|Tyranids|Orks|T'au Empire|Aeldari|Drukhari|Adeptus Mechanicus|Adeptus Custodes|Adepta Sororitas|Genestealer Cults|Imperial Knights|Chaos Knights|Leagues of Votann|Astra Militarum|Dark Angels|Blood Angels|Space Wolves)/i);
   if (factionMatch) faction = factionMatch[1];
 
-  const detachMatch = text.match(/(Banishers|Anvil Siege Force|Spearhead Assault|First Brotherhood|Teleport Strike Force|Warpbane Brotherhood)\s*(?:CHARACTERS|BATTLELINE|•)/);
+  const detachMatch = text.match(/^(.+?)\s*\(\d+\s*Detachment Points?\)\s*$/im);
   if (detachMatch) detachment = detachMatch[1].trim();
 
-  const units = [];
+  const lines    = text.split('\n');
+  const unitLineRe = /^([A-Za-z][A-Za-z0-9\s'’\-]*?)\s*\((\d+)\s*points?\)\s*$/i;
+  const units    = [];
+  let inSection  = false;
 
-  for (const block of blocks) {
-    const name   = block[1].trim();
-    const points = parseInt(block[2]);
-    const body   = block[3] || '';
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
 
-    if (/^(strike force|patrol|battalion|vanguard|outrider|spearhead|exported|app version|\d+\s*\/\s*\d+)/i.test(name)) continue;
-    if (SECTION_HEADERS.some(h => name.toUpperCase().includes(h))) continue;
-    if (points > 2000) continue;
+    if (SECTION_HEADERS.includes(line.toUpperCase())) {
+      inSection = true;
+      i++;
+      continue;
+    }
 
-    const count    = countModelsFromBlock(body);
-    const category = inferCategory(name);
+    if (inSection && line) {
+      const m = line.match(unitLineRe);
+      if (m) {
+        const name   = m[1].trim();
+        const points = parseInt(m[2]);
 
-    units.push({
-      unitId:          crypto.randomUUID(),
-      name,
-      count,
-      points,
-      category,
-      baseSizeKey:     inferBaseSize(name, category),
-      deploymentState: 'staging',
-      warlord:         false,
-      keywords:        [],
-    });
+        // Collect the indented body (bullet/wargear lines) up to the next blank line.
+        let body = '';
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() !== '') {
+          body += lines[j] + '\n';
+          j++;
+        }
+
+        const count    = countModelsFromBlock(body);
+        const category = inferCategory(name);
+
+        units.push({
+          unitId:          crypto.randomUUID(),
+          name,
+          count,
+          points,
+          category,
+          baseSizeKey:     inferBaseSize(name, category),
+          deploymentState: 'staging',
+          warlord:         false,
+          keywords:        [],
+        });
+
+        i = j;
+        continue;
+      }
+    }
+
+    i++;
   }
 
   return units.length > 0 ? { faction, detachment, edition: '10th', units } : null;
