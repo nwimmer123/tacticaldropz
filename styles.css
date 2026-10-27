@@ -914,14 +914,15 @@ input[type="text"]::placeholder { color: #555; }
 
 .nav-btn-signup:hover { background: #c73652; }
 
-.nav-btn-pro {
+.nav-btn-coffee {
+  text-decoration: none;
   background: linear-gradient(135deg, #f6d365, #fda085);
   border-color: transparent;
   color: #000;
   font-weight: 700;
 }
 
-.nav-btn-pro:hover { opacity: 0.9; }
+.nav-btn-coffee:hover { opacity: 0.9; }
 
 .nav-user-pill {
   display: flex;
@@ -1162,7 +1163,7 @@ input[type="text"]::placeholder { color: #555; }
 
 .mobile-menu-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
 .mobile-menu-btn.active { color: #fff; background: rgba(233,69,96,0.1); border-left: 3px solid #e94560; }
-.mobile-pro-btn { color: #f6d365 !important; }
+.mobile-coffee-btn { text-decoration: none; display: block; color: #f6d365 !important; }
 
 .mobile-menu-email {
   padding: 10px 16px;

@@ -267,6 +267,19 @@ async function submitVerify() {
   }
 }
 
+// Optional tip jar -- plain link, no embedded widget/scripts (privacy page promises no tracking)
+const KOFI_URL = 'https://ko-fi.com/nwimmer123';
+
+function createCoffeeLink(className) {
+  const link = document.createElement('a');
+  link.className = className;
+  link.href = KOFI_URL;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = '☕ Buy me a coffee';
+  return link;
+}
+
 // Saving needs an account (deployments are stored per user), but accounts are free
 async function promptAccountForSave() {
   const result = await showModal({
@@ -1772,6 +1785,7 @@ function updateNavAuth() {
   const area = document.getElementById('navAuthArea');
   if (!area) return;
   area.innerHTML = '';
+  area.appendChild(createCoffeeLink('nav-btn nav-btn-coffee'));
 
   if (!isLoggedIn()) {
     // Logged out — Login + Sign Up
@@ -4032,6 +4046,8 @@ function buildMobileMenu() {
     logoutBtn.onclick = () => { closeMobileMenu(); logout(); };
     menu.appendChild(logoutBtn);
   }
+
+  menu.appendChild(createCoffeeLink('mobile-menu-btn mobile-coffee-btn'));
 
   // ── BOARD ──
   const boardHeader = document.createElement('div');
