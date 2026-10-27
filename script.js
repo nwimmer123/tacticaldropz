@@ -4,7 +4,7 @@ const SIGNUP_PAUSED_MSG = 'Signups are temporarily paused while we resolve an em
 const TERRAIN_OVERLAY_ENABLED = false; // Set to true when terrain JSON files are ready for production
 const API_URL = 'https://7mszujxl65.execute-api.us-west-2.amazonaws.com/prod';
 
-async function apiCall(method, path, body = null, requiresAuth = false) {
+async function apiCall(method, path, body = null, requiresAuth = false, isRetry = false) {
   const headers = { 'Content-Type': 'application/json' };
   if (requiresAuth) {
     const token = localStorage.getItem('td_access_token');
@@ -16,16 +16,59 @@ async function apiCall(method, path, body = null, requiresAuth = false) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+  // Access tokens expire after 24h -- renew once with the refresh token and retry
+  if (res.status === 401 && requiresAuth && !isRetry && await refreshSession()) {
+    return apiCall(method, path, body, requiresAuth, true);
+  }
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
   return data;
+}
+
+// ─── Session Refresh ──────────────────────────────────────────────────────────
+// The API's Cognito authorizer accepts access tokens, which only last 24h. Signin
+// also hands back a 30-day refresh token; trading it for a new access token
+// directly with Cognito keeps people logged in instead of silently dropping them
+// every day. Client ID is public (no secret on this app client).
+const COGNITO_ENDPOINT  = 'https://cognito-idp.us-west-2.amazonaws.com/';
+const COGNITO_CLIENT_ID = '172o8vcvbq8inspt939dkqrnns';
+
+async function refreshSession() {
+  const refreshToken = localStorage.getItem('td_refresh_token');
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(COGNITO_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth',
+      },
+      body: JSON.stringify({
+        AuthFlow: 'REFRESH_TOKEN_AUTH',
+        ClientId: COGNITO_CLIENT_ID,
+        AuthParameters: { REFRESH_TOKEN: refreshToken },
+      }),
+    });
+    if (!res.ok) return false;
+    const result = (await res.json()).AuthenticationResult;
+    if (!result?.AccessToken) return false;
+    localStorage.setItem('td_access_token', result.AccessToken);
+    if (result.RefreshToken) localStorage.setItem('td_refresh_token', result.RefreshToken);
+    console.log('[Auth] Session refreshed');
+    return true;
+  } catch (e) {
+    console.log('[Auth] Session refresh failed:', e.message);
+    return false;
+  }
 }
 
 // ─── Auth State ───────────────────────────────────────────────────────────────
 let currentUser = null; // { userId, email, subscriptionStatus, displayName }
 
 function isLoggedIn()  { return !!currentUser; }
-function isPro()       { return currentUser?.subscriptionStatus === 'pro' || currentUser?.subscriptionStatus === 'pro_trial'; }
+// Pro was discontinued Oct 2026 (everything is free now). Only used to keep the
+// Stripe billing portal reachable for anyone with a leftover subscription.
+function hasLegacySubscription() { return currentUser?.subscriptionStatus === 'pro'; }
 function getToken()    { return localStorage.getItem('td_access_token'); }
 
 async function loadCurrentUser() {
@@ -49,6 +92,7 @@ function logout() {
   currentUser = null;
   updateNavAuth();
   updateSaveLoadButtons();
+  buildMobileMenu();
 }
 
 // ─── Auth Modal ───────────────────────────────────────────────────────────────
@@ -109,11 +153,7 @@ async function submitLogin() {
     closeAuthModal();
     updateNavAuth();
     updateSaveLoadButtons();
-    if (window.location.search.includes('subscribed=true')) {
-      await loadCurrentUser();
-      updateNavAuth();
-      window.history.replaceState({}, '', '/');
-    }
+    buildMobileMenu();
   } catch (e) {
     const msg = e.message || '';
     if (msg.includes('UserNotFoundException') || msg.includes('User does not exist') || msg.includes('user does not exist')) {
@@ -227,29 +267,20 @@ async function submitVerify() {
   }
 }
 
-async function goPro() {
-  if (!isLoggedIn()) {
-    // Show a dedicated Go Pro modal — not the generic auth modal
-    const result = await showModal({
-      title: '⚡ Go Pro — $5/month',
-      body: `<p style="margin-bottom:12px;">Save deployments, store army lists, and unlock all Pro features.</p>
-             <p>Create a free account to get started — no credit card required until you subscribe.</p>`,
-      buttons: [
-        { label: 'Log In',    style: 'modal-btn-secondary', value: 'login'  },
-        { label: 'Sign Up',   style: 'modal-btn-primary',   value: 'signup' },
-        { label: 'Cancel',    style: 'modal-btn-secondary', value: null     },
-      ]
-    });
-    if (result === 'login')  openAuthModal('login');
-    if (result === 'signup') openAuthModal('signup');
-    return;
-  }
-  try {
-    const data = await apiCall('POST', '/stripe/create-checkout', {}, true);
-    window.location.href = data.url;
-  } catch (e) {
-    modalAlert('Error', e.message);
-  }
+// Saving needs an account (deployments are stored per user), but accounts are free
+async function promptAccountForSave() {
+  const result = await showModal({
+    title: '💾 Save Deployments',
+    body: `<p style="margin-bottom:12px;">Save your deployments to your account and load them on any device before a game.</p>
+           <p>Accounts are free — just log in or sign up.</p>`,
+    buttons: [
+      { label: 'Log In',  style: 'modal-btn-secondary', value: 'login'  },
+      { label: 'Sign Up', style: 'modal-btn-primary',   value: 'signup' },
+      { label: 'Cancel',  style: 'modal-btn-secondary', value: null     },
+    ]
+  });
+  if (result === 'login')  openAuthModal('login');
+  if (result === 'signup') openAuthModal('signup');
 }
 
 async function confirmDeleteAccount() {
@@ -1585,17 +1616,6 @@ async function init() {
   const stagingEl = document.getElementById('stagingArea');
   if (stagingEl) stagingObserver.observe(stagingEl);
 
-  // Handle Stripe success/cancel redirect
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('subscribed') === 'true') {
-    await loadCurrentUser();
-    updateNavAuth();
-    window.history.replaceState({}, '', '/');
-    if (isPro()) modalAlert('⚡ Welcome to Pro!', 'Your subscription is now active. Enjoy saved deployments and all Pro features!');
-  }
-  if (params.get('cancelled') === 'true') {
-    window.history.replaceState({}, '', '/');
-  }
 }
 
 // ─── Data Loading ─────────────────────────────────────────────────────────────
@@ -1754,7 +1774,7 @@ function updateNavAuth() {
   area.innerHTML = '';
 
   if (!isLoggedIn()) {
-    // Logged out — Login + Sign Up + Go Pro
+    // Logged out — Login + Sign Up
     const loginBtn = document.createElement('button');
     loginBtn.className = 'nav-btn nav-btn-login';
     loginBtn.textContent = 'Log In';
@@ -1768,12 +1788,6 @@ function updateNavAuth() {
       signupBtn.textContent = 'Sign Up';
       signupBtn.onclick = () => openAuthModal('signup');
       area.appendChild(signupBtn);
-
-      const proBtn = document.createElement('button');
-      proBtn.className = 'nav-btn nav-btn-pro';
-      proBtn.textContent = '⚡ Go Pro';
-      proBtn.onclick = goPro;
-      area.appendChild(proBtn);
     } else {
       const pausedBtn = document.createElement('button');
       pausedBtn.className = 'nav-btn nav-btn-signup';
@@ -1784,57 +1798,24 @@ function updateNavAuth() {
       area.appendChild(pausedBtn);
     }
 
-  } else if (!isPro()) {
-    // Logged in free — show email + Go Pro
+  } else {
+    // Logged in — email, click for account menu
     const emailSpan = document.createElement('span');
     emailSpan.className = 'nav-user-email';
     emailSpan.textContent = currentUser.email;
     emailSpan.onclick = () => {
+      // Leftover Pro subscribers keep a way to reach Stripe and cancel themselves
+      const billing = hasLegacySubscription()
+        ? [{ label: 'Manage Billing', style: 'modal-btn-secondary', value: 'billing' }]
+        : [];
       showModal({
         title: 'Account',
-        body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: Free</p>`,
+        body: `<p>Logged in as <strong>${currentUser.email}</strong></p>`,
         buttons: [
+          ...billing,
           { label: 'Delete Account', style: 'modal-btn-danger',    value: 'delete' },
           { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout' },
           { label: 'Close',          style: 'modal-btn-primary',   value: 'close'  },
-        ]
-      }).then(v => {
-        if (v === 'logout') logout();
-        if (v === 'delete') confirmDeleteAccount();
-      });
-    };
-
-    const proBtn = document.createElement('button');
-    proBtn.className = 'nav-btn nav-btn-pro';
-    proBtn.textContent = '⚡ Go Pro — $5/mo';
-    proBtn.onclick = goPro;
-
-    area.appendChild(emailSpan);
-    area.appendChild(proBtn);
-
-  } else {
-    // Pro user — email + PRO badge, click for account menu
-    const pill = document.createElement('div');
-    pill.className = 'nav-user-pill';
-
-    const emailSpan = document.createElement('span');
-    emailSpan.textContent = currentUser.email;
-
-    const badge = document.createElement('span');
-    badge.className = 'nav-pro-badge';
-    badge.textContent = 'PRO';
-
-    pill.appendChild(emailSpan);
-    pill.appendChild(badge);
-    pill.onclick = () => {
-      showModal({
-        title: 'Account',
-        body: `<p>Logged in as <strong>${currentUser.email}</strong></p><p style="margin-top:8px;">Subscription: <strong style="color:#64dc64">Pro ⚡</strong></p>`,
-        buttons: [
-          { label: 'Manage Billing', style: 'modal-btn-secondary', value: 'billing' },
-          { label: 'Delete Account', style: 'modal-btn-danger',    value: 'delete'  },
-          { label: 'Log Out',        style: 'modal-btn-danger',    value: 'logout'  },
-          { label: 'Close',          style: 'modal-btn-primary',   value: 'close'   },
         ]
       }).then(v => {
         if (v === 'logout')  logout();
@@ -1843,7 +1824,7 @@ function updateNavAuth() {
       });
     };
 
-    area.appendChild(pill);
+    area.appendChild(emailSpan);
   }
 }
 
@@ -3774,19 +3755,20 @@ function updateHintForTool() {
   }
 }
 
-// ─── Save / Load (Pro Cloud) ──────────────────────────────────────────────────
+// ─── Save / Load (Cloud, free with an account) ───────────────────────────────
 
+// Always visible so people know saving exists; logged-out clicks get a
+// log in / sign up prompt instead
 function updateSaveLoadButtons() {
   const saveBtn = document.getElementById('saveBtn');
   const loadBtn = document.getElementById('loadBtn');
   if (!saveBtn || !loadBtn) return;
-  const show = isPro();
-  saveBtn.style.display = show ? 'inline-block' : 'none';
-  loadBtn.style.display = show ? 'inline-block' : 'none';
+  saveBtn.style.display = 'inline-block';
+  loadBtn.style.display = 'inline-block';
 }
 
 async function saveDeployment() {
-  if (!isPro()) return;
+  if (!isLoggedIn()) return promptAccountForSave();
 
   const name = await modalPrompt('Save Deployment', 'Give this deployment a name:', '', 'e.g. WTC Round 1 vs Space Marines');
   if (!name || !name.trim()) return;
@@ -3816,7 +3798,7 @@ async function saveDeployment() {
 }
 
 async function openDeploymentsModal() {
-  if (!isPro()) return;
+  if (!isLoggedIn()) return promptAccountForSave();
   document.getElementById('deploymentsModalOverlay').style.display = 'flex';
   const body = document.getElementById('deploymentsListBody');
   body.innerHTML = '<div class="deployments-loading">Loading...</div>';
@@ -4030,31 +4012,18 @@ function buildMobileMenu() {
     loginBtn.textContent = '👤 Log In / Sign Up';
     loginBtn.onclick = () => { closeMobileMenu(); openAuthModal('login'); };
     menu.appendChild(loginBtn);
-
-    const proBtn = document.createElement('button');
-    proBtn.className = 'mobile-menu-btn mobile-pro-btn';
-    proBtn.textContent = '⚡ Go Pro — $5/mo';
-    proBtn.onclick = () => { closeMobileMenu(); goPro(); };
-    menu.appendChild(proBtn);
   } else {
     const emailDiv = document.createElement('div');
     emailDiv.className = 'mobile-menu-email';
     emailDiv.textContent = currentUser.email;
-    if (isPro()) {
-      const badge = document.createElement('span');
-      badge.className = 'nav-pro-badge';
-      badge.textContent = 'PRO';
-      badge.style.marginLeft = '6px';
-      emailDiv.appendChild(badge);
-    }
     menu.appendChild(emailDiv);
 
-    if (!isPro()) {
-      const proBtn = document.createElement('button');
-      proBtn.className = 'mobile-menu-btn mobile-pro-btn';
-      proBtn.textContent = '⚡ Go Pro — $5/mo';
-      proBtn.onclick = () => { closeMobileMenu(); goPro(); };
-      menu.appendChild(proBtn);
+    if (hasLegacySubscription()) {
+      const billingBtn = document.createElement('button');
+      billingBtn.className = 'mobile-menu-btn';
+      billingBtn.textContent = '💳 Manage Billing';
+      billingBtn.onclick = () => { closeMobileMenu(); openBillingPortal(); };
+      menu.appendChild(billingBtn);
     }
 
     const logoutBtn = document.createElement('button');
@@ -4102,19 +4071,17 @@ function buildMobileMenu() {
     clearBtn.onclick = () => { closeMobileMenu(); clearCanvas(); };
     menu.appendChild(clearBtn);
 
-    if (isPro()) {
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'mobile-menu-btn';
-      saveBtn.textContent = '💾 Save Deployment';
-      saveBtn.onclick = () => { closeMobileMenu(); saveDeployment(); };
-      menu.appendChild(saveBtn);
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'mobile-menu-btn';
+    saveBtn.textContent = '💾 Save Deployment';
+    saveBtn.onclick = () => { closeMobileMenu(); saveDeployment(); };
+    menu.appendChild(saveBtn);
 
-      const loadBtn = document.createElement('button');
-      loadBtn.className = 'mobile-menu-btn';
-      loadBtn.textContent = '📂 My Deployments';
-      loadBtn.onclick = () => { closeMobileMenu(); openDeploymentsModal(); };
-      menu.appendChild(loadBtn);
-    }
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'mobile-menu-btn';
+    loadBtn.textContent = '📂 My Deployments';
+    loadBtn.onclick = () => { closeMobileMenu(); openDeploymentsModal(); };
+    menu.appendChild(loadBtn);
   }
 
   // ── EDITION ──
