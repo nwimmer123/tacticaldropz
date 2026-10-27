@@ -3224,6 +3224,7 @@ function drawUserDrawings() {
   drawings.forEach((drawing, i) => {
     if      (drawing.type === 'unit')       drawUnit(drawing);
     else if (drawing.type === 'measure')    drawMeasure(drawing);
+    else if (drawing.type === 'losLine')    drawLosLine(drawing);
     else if (drawing.type === 'label')      drawLabel(drawing);
     else if (drawing.type === 'modelGroup') drawModelGroup(drawing, i === modelsEditingIndex);
   });
@@ -3276,6 +3277,24 @@ function drawMeasure(drawing) {
     ctx.fillStyle = '#ff8800';
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// Plain yellow sight line -- no terrain clipping, no distance label
+function drawLosLine(drawing) {
+  const { start, end } = drawing;
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  [start, end].forEach(pt => {
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
     ctx.fill();
   });
 }
@@ -3378,12 +3397,12 @@ function handleMouseDown(e) {
     return; // no model/draw/measure interaction while in setup mode
   }
 
-  // Right-click on measure/label: delete it
-  if (e.button === 2 && (currentTool === 'measure' || currentTool === 'label')) {
+  // Right-click on measure/LOS line/label: delete it
+  if (e.button === 2 && (currentTool === 'measure' || currentTool === 'losLine' || currentTool === 'label')) {
     for (let i = drawings.length - 1; i >= 0; i--) {
       const d = drawings[i];
       let hit = false;
-      if (d.type === 'measure' && d.start && d.end) {
+      if ((d.type === 'measure' || d.type === 'losLine') && d.start && d.end) {
         hit = distToSegment(x, y, d.start.x, d.start.y, d.end.x, d.end.y) < 10;
       } else if (d.type === 'label') {
         hit = Math.hypot(x - d.x, y - d.y) < 20;
@@ -3422,11 +3441,11 @@ function handleMouseDown(e) {
     currentPoints.push({ x, y });
     drawScene();
 
-  } else if (currentTool === 'measure') {
+  } else if (currentTool === 'measure' || currentTool === 'losLine') {
     if (measurePoints.length === 0) {
       measurePoints.push({ x, y });
     } else {
-      drawings.push({ type: 'measure', start: measurePoints[0], end: { x, y } });
+      drawings.push({ type: currentTool, start: measurePoints[0], end: { x, y } });
       measurePoints = [];
       drawScene();
     }
@@ -3598,9 +3617,9 @@ function handleMouseMove(e) {
     canvas.style.cursor = over ? 'grab' : 'crosshair';
   }
 
-  if (measurePoints.length === 1 && currentTool === 'measure') {
+  if (measurePoints.length === 1 && (currentTool === 'measure' || currentTool === 'losLine')) {
     drawScene();
-    ctx.strokeStyle = 'rgba(255,136,0,0.5)';
+    ctx.strokeStyle = currentTool === 'losLine' ? 'rgba(255,215,0,0.5)' : 'rgba(255,136,0,0.5)';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
