@@ -24,8 +24,8 @@ the cleanup note.
 """
 import json, math, os
 
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
-OUT_DIR = r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e"
+CACHE_DIR = os.environ.get("E11_CACHE", os.path.join(os.path.dirname(__file__), "cache"))
+OUT_DIR = os.environ.get("E11_DATA", r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e")
 
 
 def rotate(pt, board_w):
@@ -104,7 +104,7 @@ def flatten(layout, sprites):
 
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
-    PAGES = list(range(19, 54))  # 1-indexed page numbers, matching p{N}-raw.json from 02_extract_page.py
+    PAGES = list(range(*(lambda a, b: (a, b + 1))(*map(int, os.environ.get("E11_PAGES", "19-53").split("-")))))  # 1-indexed; E11_PAGES="first-last"
     for pno in PAGES:
         with open(os.path.join(CACHE_DIR, f"p{pno}-raw.json")) as f:
             layout = json.load(f)

@@ -21,12 +21,12 @@ from PIL import Image, ImageDraw
 import io
 import os
 
-PDF_PATH = r"C:\Users\nxw05\Downloads\maps.pdf"
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+PDF_PATH = os.environ.get("E11_PDF", os.path.join(os.path.dirname(__file__), "..", "..", "newLayouts.pdf"))  # old Downloads/maps.pdf is gone
+CACHE_DIR = os.environ.get("E11_CACHE", os.path.join(os.path.dirname(__file__), "cache"))
 SPRITE_DIR = os.path.join(CACHE_DIR, "sprites_raw")
 os.makedirs(SPRITE_DIR, exist_ok=True)
 
-PAGES = list(range(18, 53))  # 0-indexed PDF pages to scan this run — EDIT PER BATCH
+PAGES = [p - 1 for p in range(*(lambda a, b: (a, b + 1))(*map(int, os.environ.get("E11_PAGES", "19-53").split("-"))))]  # 0-indexed; E11_PAGES="first-last" (1-indexed)
 
 doc = fitz.open(PDF_PATH)
 

@@ -58,7 +58,7 @@ import json
 import math
 import os
 
-DATA_DIR = r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e"
+DATA_DIR = os.environ.get("E11_DATA", r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e")
 
 
 def parse_area_path(d):

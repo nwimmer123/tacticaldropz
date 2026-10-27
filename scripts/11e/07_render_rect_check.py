@@ -16,8 +16,8 @@ import json
 import os
 from PIL import Image, ImageDraw
 
-DATA_DIR = r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e"
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+DATA_DIR = os.environ.get("E11_DATA", r"C:\Users\nxw05\Projects\tacticaldropz\data\terrain\11e")
+CACHE_DIR = os.environ.get("E11_CACHE", os.path.join(os.path.dirname(__file__), "cache"))
 PX_PER_IN = 12
 
 

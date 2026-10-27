@@ -35,8 +35,8 @@ from PIL import Image, ImageDraw
 from shapely.geometry import Polygon, box as shapely_box
 from shapely.ops import unary_union
 
-PDF_PATH = r"C:\Users\nxw05\Downloads\maps.pdf"
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+PDF_PATH = os.environ.get("E11_PDF", os.path.join(os.path.dirname(__file__), "..", "..", "newLayouts.pdf"))  # old Downloads/maps.pdf is gone
+CACHE_DIR = os.environ.get("E11_CACHE", os.path.join(os.path.dirname(__file__), "cache"))
 SPRITE_DIR = os.path.join(CACHE_DIR, "sprites_raw")
 
 RED_FILL = (0.6179598569869995, 0.03996337950229645, 0.05568017065525055)
@@ -456,7 +456,7 @@ def render_reconstruction(layout, sprites, features, zones, pieces, objectives, 
 
 if __name__ == "__main__":
     doc = fitz.open(PDF_PATH)
-    PAGES = list(range(18, 53))  # 0-indexed: pages 19-53
+    PAGES = [p - 1 for p in range(*(lambda a, b: (a, b + 1))(*map(int, os.environ.get("E11_PAGES", "19-53").split("-"))))]  # 0-indexed; E11_PAGES="first-last" (1-indexed)
     for pidx in PAGES:
         layout, sprites, features, zones, pieces, objectives = extract_page(doc, pidx)
         slug = f"p{pidx+1}"

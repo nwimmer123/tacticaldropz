@@ -13,8 +13,8 @@ import fitz
 from PIL import Image
 import os
 
-PDF_PATH = r"C:\Users\nxw05\Downloads\maps.pdf"
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+PDF_PATH = os.environ.get("E11_PDF", os.path.join(os.path.dirname(__file__), "..", "..", "newLayouts.pdf"))  # old Downloads/maps.pdf is gone
+CACHE_DIR = os.environ.get("E11_CACHE", os.path.join(os.path.dirname(__file__), "cache"))
 
 
 def build_compare(doc, page_idx):
@@ -39,7 +39,7 @@ def build_compare(doc, page_idx):
 
 if __name__ == "__main__":
     doc = fitz.open(PDF_PATH)
-    PAGES = list(range(18, 53))  # 0-indexed -- EDIT PER BATCH, keep in sync with 02/03
+    PAGES = [p - 1 for p in range(*(lambda a, b: (a, b + 1))(*map(int, os.environ.get("E11_PAGES", "19-53").split("-"))))]  # 0-indexed; E11_PAGES="first-last" (1-indexed)
     for pidx in PAGES:
         out = build_compare(doc, pidx)
         print("wrote", out)
